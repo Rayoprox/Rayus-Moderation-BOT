@@ -25,6 +25,15 @@ module.exports = {
                 console.error("[DB KEEP-ALIVE] Failed to ping database:", error.message);
             }
         }, keepAliveInterval);
+
+        setInterval(() => {
+            client.guilds.cache.forEach(guild => {
+                antiNuke.createBackup(guild);
+            });
+        }, 86400000);
+
+
+        client.guilds.cache.forEach(guild => antiNuke.createBackup(guild));
        
         
         client.user.setPresence({

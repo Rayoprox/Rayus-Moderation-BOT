@@ -101,7 +101,7 @@ module.exports = {
             let autoDmSent = false;
 
             try {
-                if (action === 'BAN' || action === 'TIMEOUT') {
+                if (action === 'BAN' || action === 'TIMEOUT' || action === 'MUTE') {
                     const actionEmoji = action === 'BAN' ? emojis.ban : emojis.mute;
                     const dmPunishmentEmbed = new EmbedBuilder()
                         .setColor(AUTOMOD_COLOR)
@@ -152,9 +152,14 @@ module.exports = {
                 }
 
                 if (modLogChannel) {
+                    let pastTenseAction = action.toLowerCase();
+                    if (action === 'BAN') pastTenseAction = 'banned';
+                    else if (action === 'MUTE' || action === 'TIMEOUT') pastTenseAction = 'muted';
+                    else if (action === 'KICK') pastTenseAction = 'kicked';
+
                     const punishmentLogEmbed = new EmbedBuilder()
                         .setColor(AUTOMOD_COLOR)
-                        .setAuthor({ name: `${targetUser.tag} has been auto-${action.toLowerCase()}ed`, iconURL: targetUser.displayAvatarURL({ dynamic: true }) })
+                        .setAuthor({ name: `${targetUser.tag} has been auto-${pastTenseAction}`, iconURL: targetUser.displayAvatarURL({ dynamic: true }) })
                         .addFields(
                             { name: `${emojis.user} User`, value: `<@${targetUser.id}> (\`${targetUser.id}\`)`, inline: true },
                             { name: `${emojis.rules} Moderator`, value: `<@${interaction.client.user.id}>`, inline: true },

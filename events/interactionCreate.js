@@ -172,6 +172,64 @@ module.exports = {
                      return interaction.reply({ content: `${emojis.error} Only the user who ran the original command can use these buttons.`, flags: [MessageFlags.Ephemeral] });
                  }
             }
+
+            if (customId === 'setup_antinuke') {
+                if (!await safeDefer(interaction, true)) return;
+                
+                const settingsRes = await db.query('SELECT antinuke_enabled FROM guild_backups WHERE guildid = $1', [guildId]);
+                const isEnabled = settingsRes.rows.length > 0 && settingsRes.rows[0].antinuke_enabled;
+
+                const embed = new EmbedBuilder()
+                    .setTitle('☢️ Anti-Nuke Configuration')
+                    .setDescription(`Status: **${isEnabled ? 'ENABLED ✅' : 'DISABLED ❌'}**\n\nThis system detects mass deletion of channels or roles. If triggered, it bans the user and attempts to restore the server from the last 24h backup.`)
+                    .setColor(isEnabled ? 0x2ECC71 : 0xE74C3C);
+
+                const toggleBtn = new ButtonBuilder()
+                    .setCustomId('antinuke_toggle')
+                    .setLabel(isEnabled ? 'Disable Anti-Nuke' : 'Enable Anti-Nuke')
+                    .setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success);
+                
+                const backBtn = new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('Back').setStyle(ButtonStyle.Secondary);
+
+                const channelSelect = new ChannelSelectMenuBuilder()
+                    .setCustomId('select_antinuke_channel')
+                    .setPlaceholder('Select channel for "Nuke Triggered" alerts...')
+                    .setChannelTypes(ChannelType.GuildText);
+
+                await interaction.editReply({ 
+                    embeds: [embed], 
+                    components: [
+                        new ActionRowBuilder().addComponents(toggleBtn, backBtn),
+                        new ActionRowBuilder().addComponents(channelSelect)
+                    ] 
+                });
+                return;
+            }
+
+            if (customId === 'antinuke_toggle') {
+                if (!await safeDefer(interaction, true)) return;
+                
+                const settingsRes = await db.query('SELECT antinuke_enabled FROM guild_backups WHERE guildid = $1', [guildId]);
+                const currentStatus = settingsRes.rows.length > 0 && settingsRes.rows[0].antinuke_enabled;
+                const newStatus = !currentStatus;
+
+                
+                await db.query(`
+                    INSERT INTO guild_backups (guildid, antinuke_enabled, threshold_count, threshold_time)
+                    VALUES ($1, $2, 5, 10)
+                    ON CONFLICT (guildid) DO UPDATE SET antinuke_enabled = $2
+                `, [guildId, newStatus]);
+
+               
+                if (newStatus) {
+                    const antiNuke = require('../utils/antiNuke.js');
+                    antiNuke.createBackup(interaction.guild);
+                }
+
+                const { embed, components } = await generateSetupContent(interaction, guildId);
+                await interaction.editReply({ content: `✅ Anti-Nuke system has been **${newStatus ? 'ENABLED' : 'DISABLED'}**.`, embeds: [embed], components });
+                return;
+            }
             
             if (customId === 'automod_add_rule') {
                 if (!await safeDefer(interaction, true)) return;
@@ -532,21 +590,46 @@ module.exports = {
                 }
                  if (action === 'purge-confirm') {
                     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-                    await interaction.deferUpdate();
+                    if (!await safeDefer(interaction, true)) return;
+
                     const activePunishmentsResult = await db.query("SELECT caseid, action FROM modlogs WHERE userid = $1 AND guildid = $2 AND status = 'ACTIVE' AND (action = 'TIMEOUT' OR action = 'BAN')", [userId, interaction.guild.id]);
                     if (activePunishmentsResult.rows.length > 0) {
                         const activeCase = activePunishmentsResult.rows[0];
                         return interaction.editReply({ content: `${emojis.error} You cannot purge logs for this user as they have an active **${activeCase.action}** (Case ID: \`${activeCase.caseid}\`). Please remove all active punishments with timers before purging their logs.`, components: [] });
                     }
+
                     const targetUser = await interaction.client.users.fetch(userId);
                     await db.query("DELETE FROM modlogs WHERE userid = $1 AND guildid = $2", [userId, interaction.guild.id]);
+                    
                     await interaction.editReply({ content: `${emojis.success} All **${targetUser.tag}** modlogs have been **PERMANENTLY DELETED**.`, components: [] });
+                    
                     const purgedEmbed = new EmbedBuilder().setTitle(`${emojis.void} Logs Purged`).setDescription(`The logs for this user were purged by <@${interaction.user.id}>.`).setColor(0xAA0000);
                     await interaction.message.edit({ embeds: [purgedEmbed], components: [] }).catch(() => {});
+
+                    try {
+                        const cmdLogResult = await db.query('SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = $2', [interaction.guild.id, 'cmdlog']);
+                        const cmdLogChannelId = cmdLogResult.rows[0]?.channel_id;
+                        
+                        if (cmdLogChannelId) {
+                            const logEmbed = new EmbedBuilder()
+                                .setColor(0xAA0000)
+                                .setTitle('🗑️ Logs Purged Manually')
+                                .setDescription(`**Target User:** <@${userId}> (\`${userId}\`)\n**Executor:** <@${interaction.user.id}> (<t:${Math.floor(Date.now() / 1000)}:R>)\n**Action:** Clicked "Delete PERMANENTLY" button on /modlogs.`)
+                                .setTimestamp();
+                            
+                            const channel = interaction.guild.channels.cache.get(cmdLogChannelId);
+                            if (channel) await channel.send({ embeds: [logEmbed] }).catch(() => {});
+                        }
+                    } catch (error) {
+                        console.error(error);
+                    }
                     return;
                 }
+
                 if (action === 'purge-cancel') return interaction.update({ content: `${emojis.info} Purge cancelled.`, components: [] });
             }
+
+            
             
              
             if (customId.startsWith('warns_remove-start_')) {

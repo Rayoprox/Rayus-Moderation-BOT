@@ -1,42 +1,42 @@
-// rayoprox/roc-moderation-bot/ROC-Moderation-BOT-emoji-feature/commands/admin/setup.js
-
 const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionsBitField, ChannelType, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
 const db = require('../../utils/db.js');
 const { emojis } = require('../../utils/config.js');
+const antiNuke = require('../../utils/antiNuke.js');
 const TIMEOUT = 120_000;
 
-
 const generateSetupContent = async (interaction, guildId) => {
-    // POSTGRESQL
     const [
         logChannelsResult,
         guildSettingsResult,
         permissionsResult,
-        rulesResult
+        rulesResult,
+        antiNukeResult
     ] = await Promise.all([
         db.query('SELECT * FROM log_channels WHERE guildid = $1', [guildId]),
         db.query('SELECT * FROM guild_settings WHERE guildid = $1', [guildId]),
         db.query('SELECT command_name, role_id FROM command_permissions WHERE guildid = $1 ORDER BY command_name', [guildId]),
-        db.query('SELECT rule_order, warnings_count, action_type, action_duration FROM automod_rules WHERE guildid = $1 ORDER BY warnings_count ASC', [guildId])
+        db.query('SELECT rule_order, warnings_count, action_type, action_duration FROM automod_rules WHERE guildid = $1 ORDER BY warnings_count ASC', [guildId]),
+        db.query('SELECT antinuke_enabled, threshold_count, threshold_time FROM guild_backups WHERE guildid = $1', [guildId])
     ]);
     
     const logChannels = logChannelsResult.rows;
     const guildSettings = guildSettingsResult.rows[0] || {};
     const permissions = permissionsResult.rows;
     const rules = rulesResult.rows;
+    const antiNukeSettings = antiNukeResult.rows[0] || {};
     
-    // Datos automod
     const ruleSummary = rules.map(rule => {
         const duration = rule.action_duration ? ` (${rule.action_duration})` : '*Permanent*';
         return `**#${rule.rule_order}**: ${rule.warnings_count} warns -> **${rule.action_type}**${duration}`;
     }).join('\n') || '*No Automod rules set.*';
     
-    //Esto es para Maping
     const modLog = logChannels.find(c => c.log_type === 'modlog')?.channel_id;
     const cmdLog = logChannels.find(c => c.log_type === 'cmdlog')?.channel_id;
     const banAppeal = logChannels.find(c => c.log_type === 'banappeal')?.channel_id;
+    const antiNukeLog = logChannels.find(c => c.log_type === 'antinuke')?.channel_id;
     const staffRoles = guildSettings.staff_roles ? guildSettings.staff_roles.split(',').map(r => `<@&${r}>`).join(', ') : 'Not Set';
-    
+    const isAntiNukeOn = antiNukeSettings.antinuke_enabled;
+
     const permsByCommand = permissions.reduce((acc, perm) => {
         if (!acc[perm.command_name]) acc[perm.command_name] = [];
         acc[perm.command_name].push(`<@&${perm.role_id}>`);
@@ -49,17 +49,19 @@ const generateSetupContent = async (interaction, guildId) => {
         .setTitle(`⚙️ ${interaction.guild.name}'s Setup Panel`)
         .setDescription(`Configure the bot using the buttons below.`)
         .addFields(
-            { name: `${emojis.channel} Log Channels`, value: `**Mod Log:** ${modLog ? `<#${modLog}>` : 'Not Set'}\n**Command Log:** ${cmdLog ? `<#${cmdLog}>` : 'Not Set'}\n**Ban Appeals:** ${banAppeal ? `<#${banAppeal}>` : 'Not Set'}` },
+            { name: `${emojis.channel} Log Channels`, value: `**Mod Log:** ${modLog ? `<#${modLog}>` : 'Not Set'}\n**Command Log:** ${cmdLog ? `<#${cmdLog}>` : 'Not Set'}\n**Ban Appeals:** ${banAppeal ? `<#${banAppeal}>` : 'Not Set'}\n**Anti-Nuke Log:** ${antiNukeLog ? `<#${antiNukeLog}>` : 'Not Set'}` },
             { name: `${emojis.role} Roles`, value: `**Staff Roles:** ${staffRoles}` }, 
             { name: `${emojis.lock} Command Permissions`, value: permsConfig },
-            { name: `${emojis.rules} Automod Rules`, value: ruleSummary }
+            { name: `${emojis.rules} Automod Rules`, value: ruleSummary },
+            { name: '☢️ Anti-Nuke System', value: isAntiNukeOn ? `✅ **ENABLED** (Threshold: ${antiNukeSettings.threshold_count || 5} deletions in ${antiNukeSettings.threshold_time || 10}s)` : '❌ **DISABLED**' }
         );
 
     const mainRow1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('setup_channels').setLabel('Log Channels').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('setup_staff_roles').setLabel('Staff Roles').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('setup_permissions').setLabel('Command Permissions').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('setup_automod').setLabel('Automod Rules').setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId('setup_automod').setLabel('Automod Rules').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('setup_antinuke').setLabel('Anti-Nuke').setStyle(isAntiNukeOn ? ButtonStyle.Success : ButtonStyle.Danger)
     );
 
     const mainRow2 = new ActionRowBuilder().addComponents(
@@ -70,10 +72,6 @@ const generateSetupContent = async (interaction, guildId) => {
     return { embed, components: [mainRow1, mainRow2] };
 };
 
-
-// Separamos ................................................................
-
-
 module.exports = {
     deploy: 'main',
     data: new SlashCommandBuilder()
@@ -81,59 +79,39 @@ module.exports = {
         .setDescription('Shows the main setup panel for the bot.')
         .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
 
-    
     generateSetupContent,
 
     async execute(interaction) {
         const guildId = interaction.guild.id;
-
-      
         const { embed: mainEmbed, components: mainComponents } = await generateSetupContent(interaction, guildId);
 
-        // Un fix critico 
         const response = await interaction.editReply({ 
             embeds: [mainEmbed], 
             components: mainComponents, 
             flags: [MessageFlags.Ephemeral] 
         });
 
-        //Collector aqui
         const collector = response.createMessageComponentCollector({ time: TIMEOUT });
 
-       
         collector.on('end', () => interaction.editReply({ content: 'Setup panel has expired.', embeds: [], components: [] }).catch(() => {}));
 
-
         collector.on('collect', async i => {
-            
-            // Checkear autorizacion
             if (i.user.id !== interaction.user.id) {
-               
                 return i.reply({ content: "❌ Only the user who ran the command can use this menu.", ephemeral: true });
             }
 
-            // Estabilidad
-            const isSelectMenu = i.isStringSelectMenu() || i.isRoleSelectMenu() || i.isChannelSelectMenu();
             const isButton = i.isButton();
             const opensModal = i.customId === 'automod_add_rule';
             
-            // Fix critico
             if (isButton && !opensModal) { 
-            
                 const deferSuccess = await i.deferUpdate().then(() => true).catch(e => {
-                 
                     if (e.code === 10062 || e.code === 40060) {
-                        console.warn('[SETUP] User clicked expired button or interaction already handled (code 10062/40060), ignoring.');
                         return false; 
                     }
                     throw e; 
                 });
-                
-            
                 if (!deferSuccess) return;
             }
-            
-           
 
             switch (i.customId) {
                 case 'cancel_setup':
@@ -141,12 +119,12 @@ module.exports = {
                     return collector.stop();
                     
                 case 'delete_all_data':
-                    // POSTGRESQL eliminar
                     await db.query('DELETE FROM log_channels WHERE guildid = $1', [guildId]);
                     await db.query('DELETE FROM guild_settings WHERE guildid = $1', [guildId]);
                     await db.query('DELETE FROM command_permissions WHERE guildid = $1', [guildId]);
                     await db.query('DELETE FROM automod_rules WHERE guildid = $1', [guildId]);
-                    await db.query('DELETE FROM pending_appeals WHERE guildid = $1', [guildId]); // Limpieza de nueva tabla
+                    await db.query('DELETE FROM pending_appeals WHERE guildid = $1', [guildId]);
+                    await db.query('DELETE FROM guild_backups WHERE guildid = $1', [guildId]);
                     
                     await i.editReply({ content: '✅ All configuration data for this server has been deleted.', embeds: [], components: [] });
                     return collector.stop();
@@ -164,11 +142,9 @@ module.exports = {
                 }
                 
                 case 'setup_staff_roles': {
-                  
                     const guildSettingsResult = await db.query('SELECT staff_roles FROM guild_settings WHERE guildid = $1', [guildId]);
                     const currentStaffRoles = guildSettingsResult.rows[0]?.staff_roles?.split(',').filter(r => r) || [];
                     
-                    // Maximo 25 evitar errores
                     let menu = new RoleSelectMenuBuilder()
                         .setCustomId('select_staff_roles')
                         .setPlaceholder('Select staff roles...')
@@ -187,7 +163,6 @@ module.exports = {
                 }
                 
                 case 'setup_permissions': {
-                    // Filtrar comandos
                     const commandOptions = Array.from(interaction.client.commands.keys()).filter(cmd => cmd !== 'setup' && cmd !== 'help' && cmd !== 'ping').map(cmd => ({ label: `/${cmd}`, value: cmd }));
                     const menu = new StringSelectMenuBuilder().setCustomId('select_command_perms').setPlaceholder('Select a command to configure...').addOptions(commandOptions);
                     const backButton = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
@@ -196,19 +171,14 @@ module.exports = {
                 }
                 
                 case 'setup_automod': {
-                    // CORRECCIÓN DE VISUALIZACIÓN: Se llama a generateSetupContent para el resumen de reglas
                     const { embed: currentEmbed } = await generateSetupContent(interaction, guildId);
-                    
-                    // Se busca el campo por la subcadena "Automod Rules" para obtener la regla correcta
                     const automodField = currentEmbed.data.fields.find(f => f.name.includes('Automod Rules'));
                     const ruleSummary = automodField ? automodField.value : '*No Automod rules set.*';
                     
                     const rulesEmbed = new EmbedBuilder()
                         .setTitle('🤖 Automod Rules Setup')
                         .setDescription(`Configure the automatic punishment thresholds based on active warnings.`)
-                        .addFields(
-                            { name: 'Current Rules', value: ruleSummary } // Se usa el summary correcto
-                        )
+                        .addFields({ name: 'Current Rules', value: ruleSummary })
                         .setColor(0x2ECC71);
 
                     const ruleActions = new ActionRowBuilder().addComponents(
@@ -218,6 +188,57 @@ module.exports = {
                     );
 
                     await i.editReply({ embeds: [rulesEmbed], components: [ruleActions] });
+                    break;
+                }
+
+                case 'setup_antinuke': {
+                    const settingsRes = await db.query('SELECT antinuke_enabled FROM guild_backups WHERE guildid = $1', [guildId]);
+                    const isEnabled = settingsRes.rows.length > 0 && settingsRes.rows[0].antinuke_enabled;
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('☢️ Anti-Nuke Configuration')
+                        .setDescription(`Status: **${isEnabled ? 'ENABLED ✅' : 'DISABLED ❌'}**\n\nThis system detects mass deletion of channels or roles. If triggered, it bans the user and attempts to restore the server from the last 24h backup.`)
+                        .setColor(isEnabled ? 0x2ECC71 : 0xE74C3C);
+
+                    const toggleBtn = new ButtonBuilder()
+                        .setCustomId('antinuke_toggle')
+                        .setLabel(isEnabled ? 'Disable Anti-Nuke' : 'Enable Anti-Nuke')
+                        .setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success);
+                    
+                    const backBtn = new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('Back').setStyle(ButtonStyle.Secondary);
+
+                    const channelSelect = new ChannelSelectMenuBuilder()
+                        .setCustomId('select_antinuke_channel')
+                        .setPlaceholder('Select channel for "Nuke Triggered" alerts...')
+                        .setChannelTypes(ChannelType.GuildText);
+
+                    await i.editReply({ 
+                        embeds: [embed], 
+                        components: [
+                            new ActionRowBuilder().addComponents(toggleBtn, backBtn),
+                            new ActionRowBuilder().addComponents(channelSelect)
+                        ] 
+                    });
+                    break;
+                }
+
+                case 'antinuke_toggle': {
+                    const settingsRes = await db.query('SELECT antinuke_enabled FROM guild_backups WHERE guildid = $1', [guildId]);
+                    const currentStatus = settingsRes.rows.length > 0 && settingsRes.rows[0].antinuke_enabled;
+                    const newStatus = !currentStatus;
+
+                    await db.query(`
+                        INSERT INTO guild_backups (guildid, antinuke_enabled, threshold_count, threshold_time)
+                        VALUES ($1, $2, 5, 10)
+                        ON CONFLICT (guildid) DO UPDATE SET antinuke_enabled = $2
+                    `, [guildId, newStatus]);
+
+                    if (newStatus) {
+                        antiNuke.createBackup(interaction.guild);
+                    }
+
+                    const { embed, components } = await generateSetupContent(interaction, guildId);
+                    await i.editReply({ content: `✅ Anti-Nuke system has been **${newStatus ? 'ENABLED' : 'DISABLED'}**.`, embeds: [embed], components });
                     break;
                 }
                 
