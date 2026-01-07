@@ -2,7 +2,6 @@
 
 const { Pool } = require('pg');
 
-
 const pool = new Pool({
     connectionString: process.env.POSTGRES_URL, 
     ssl: {
@@ -16,7 +15,7 @@ const db = {
     },
 
     ensureTables: async () => {
-        // Definición de la Tabla modlogs con dmstatus ---
+        // --- Modlogs Table Definition (includes dmstatus and action_duration) ---
         const createModlogsTable = `
             CREATE TABLE IF NOT EXISTS modlogs (
                 id SERIAL PRIMARY KEY,
@@ -31,10 +30,11 @@ const db = {
                 timestamp BIGINT NOT NULL,
                 dmstatus TEXT,  
                 status TEXT DEFAULT 'ACTIVE',
-                endsAt BIGINT
+                endsAt BIGINT,
+                action_duration TEXT
             );`;
             
-        // Definición de las demás tablas 
+        // --- Other Tables Definitions ---
         const createLogChannelsTable = `
             CREATE TABLE IF NOT EXISTS log_channels (
                 id SERIAL PRIMARY KEY, guildid TEXT UNIQUE NOT NULL, log_type TEXT NOT NULL, channel_id TEXT, UNIQUE (guildid, log_type)
@@ -55,7 +55,8 @@ const db = {
             CREATE TABLE IF NOT EXISTS appeal_blacklist (
                 id SERIAL PRIMARY KEY, userid TEXT NOT NULL, guildid TEXT NOT NULL, timestamp BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000, UNIQUE (userid, guildid)
             );`;
-        // NUEVA TABLA: Rastrea apelaciones pendientes
+            
+        // NEW TABLE: Tracks pending appeals
         const createPendingAppealsTable = `
             CREATE TABLE IF NOT EXISTS pending_appeals (
                 userid TEXT NOT NULL,
@@ -65,19 +66,24 @@ const db = {
                 PRIMARY KEY (userid, guildid)
             );`;
 
-
-        // 1. Ejecutar la creación de la tabla modlogs (incluye dmstatus si no existe)
+        // 1. Create modlogs table
         await db.query(createModlogsTable);
         
-    
+        // 2. Add 'dmstatus' column if it doesn't exist (Backward compatibility)
         try {
              await db.query(`ALTER TABLE modlogs ADD COLUMN dmstatus TEXT`);
         } catch (e) {
-          
              if (e.code !== '42701' && e.code !== '42P01') console.warn(`[WARN] Could not add dmstatus column: ${e.message}`);
         }
+
+        // 3. Add 'action_duration' column if it doesn't exist (FIX FOR YOUR ERROR)
+        try {
+            await db.query(`ALTER TABLE modlogs ADD COLUMN action_duration TEXT`);
+       } catch (e) {
+            if (e.code !== '42701' && e.code !== '42P01') console.warn(`[WARN] Could not add action_duration column: ${e.message}`);
+       }
         
-        // 3. Ejecutar las demás tablas
+        // 4. Create other tables
         await db.query(createLogChannelsTable);
         await db.query(createGuildSettingsTable);
         await db.query(createCommandPermissionsTable);
