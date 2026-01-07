@@ -15,22 +15,20 @@ module.exports = {
         
         console.log(`[INFO] Completed timer resumption process. Total resumed: ${resumedCount}.`);
 
-       
+        // Database Keep-Alive
         const keepAliveInterval = 24 * 60 * 60 * 1000; 
-
         setInterval(async () => {
             try {
                 console.log("[DB KEEP-ALIVE] Pinging database to prevent sleep...");
                 await db.query('SELECT 1');
-                console.log("[DB KEEP-ALIVE] Database ping successful.");
             } catch (error) {
                 console.error("[DB KEEP-ALIVE] Failed to ping database:", error.message);
             }
         }, keepAliveInterval);
        
-
+        
         client.user.setPresence({
-            activities: [{ name: 'Moderating Realm Of Curses', type: ActivityType.Watching }],
+            activities: [{ name: 'Universal Piece Moderation Bot', type: ActivityType.Watching }],
             status: 'online',
         });
     },
