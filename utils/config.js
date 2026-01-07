@@ -9,8 +9,9 @@ const SUPREME_IDS = [
 ];
 
 module.exports = {
+    // Exportamos la lista para que el comando /universalpanel la pueda leer
+    SUPREME_IDS,
 
-    
     // Emojis que usarás en todo el bot
     emojis: {
         // --- Emojis de Estado ---
@@ -41,6 +42,4 @@ module.exports = {
         role: '<:Role:1427318703946596423>',
         rules: '<:rules:1427318705918054492>'
     }
-
-
 };
