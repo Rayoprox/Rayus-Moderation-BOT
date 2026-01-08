@@ -34,7 +34,7 @@ module.exports = {
         }, 86400000);
 
         client.user.setPresence({
-            activities: [{ name: 'Moderating Realm Of Curses', type: ActivityType.Watching }],
+            activities: [{ name: 'Moderating Universal Piece', type: ActivityType.Watching }],
             status: 'online',
         });
     },
