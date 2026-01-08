@@ -1,7 +1,6 @@
-const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionsBitField, ChannelType, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionsBitField } = require('discord.js');
 const db = require('../../utils/db.js');
 const { emojis } = require('../../utils/config.js');
-const TIMEOUT = 300_000; // 5 Minutos
 
 const generateSetupContent = async (interaction, guildId) => {
     // 1. Cargas de base de datos
@@ -73,111 +72,16 @@ module.exports = {
     generateSetupContent,
 
     async execute(interaction) {
-        
-        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-
+        // La interacción ya fue diferida en interactionCreate.js si todo va bien, 
+        // pero por seguridad hacemos editReply directo.
         const guildId = interaction.guild.id;
         const { embed: mainEmbed, components: mainComponents } = await generateSetupContent(interaction, guildId);
 
-        const response = await interaction.editReply({ 
+        // Enviamos el panel y TERMINAMOS. No hay collectors aquí.
+        // Toda la lógica de botones la manejará interactionCreate.js
+        await interaction.editReply({ 
             embeds: [mainEmbed], 
             components: mainComponents
-        });
-
-        // FiltRo
-        const handledIds = [
-            'cancel_setup', 
-            'delete_all_data', 
-            'setup_channels', 
-            'set_modlog', 'set_cmdlog', 'set_banappeal',
-            'setup_staff_roles', 
-            'select_staff_roles',
-            'setup_permissions', 
-            'select_command_perms',
-            'setup_automod', 
-            'setup_back_to_main'
-        ];
-
-        const collector = response.createMessageComponentCollector({ time: TIMEOUT });
-
-        collector.on('end', () => interaction.editReply({ content: 'Setup expired.', embeds: [], components: [] }).catch(() => {}));
-
-        collector.on('collect', async i => {
-            if (i.user.id !== interaction.user.id) return i.reply({ content: "❌ Only command author.", flags: [MessageFlags.Ephemeral] });
-
-           
-            if (!handledIds.includes(i.customId)) return;
-
-            try { await i.deferUpdate(); } catch (e) { return; }
-
-            switch (i.customId) {
-                case 'cancel_setup':
-                    await i.editReply({ content: 'Setup closed.', embeds: [], components: [] }); 
-                    return collector.stop();
-                    
-                case 'delete_all_data':
-                    await db.query('DELETE FROM log_channels WHERE guildid = $1', [guildId]);
-                    await db.query('DELETE FROM guild_settings WHERE guildid = $1', [guildId]);
-                    await db.query('DELETE FROM command_permissions WHERE guildid = $1', [guildId]);
-                    await db.query('DELETE FROM automod_rules WHERE guildid = $1', [guildId]);
-                    await db.query('DELETE FROM pending_appeals WHERE guildid = $1', [guildId]);
-                    await db.query('DELETE FROM guild_backups WHERE guildid = $1', [guildId]);
-                    await i.editReply({ content: '✅ Data reset.', embeds: [], components: [] });
-                    return collector.stop();
-                    
-                case 'setup_channels': {
-                    const buttons = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('set_modlog').setLabel('Mod Log').setStyle(ButtonStyle.Secondary), 
-                        new ButtonBuilder().setCustomId('set_cmdlog').setLabel('Cmd Log').setStyle(ButtonStyle.Secondary), 
-                        new ButtonBuilder().setCustomId('set_banappeal').setLabel('Appeals').setStyle(ButtonStyle.Secondary)
-                    );
-                    const back = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
-                    await i.editReply({ embeds: [new EmbedBuilder().setTitle('📺 Log Channels')], components: [buttons, back] });
-                    break;
-                }
-                
-                case 'setup_staff_roles': {
-                    const menu = new RoleSelectMenuBuilder().setCustomId('select_staff_roles').setPlaceholder('Select staff roles...').setMinValues(0).setMaxValues(25);
-                    const back = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
-                    await i.editReply({ embeds: [new EmbedBuilder().setTitle('👑 Staff Roles')], components: [new ActionRowBuilder().addComponents(menu), back] });
-                    break;
-                }
-                
-                case 'setup_permissions': {
-                    const cmds = Array.from(interaction.client.commands.keys()).filter(cmd => cmd !== 'setup' && cmd !== 'help' && cmd !== 'ping').map(cmd => ({ label: `/${cmd}`, value: cmd }));
-                    const menu = new StringSelectMenuBuilder().setCustomId('select_command_perms').setPlaceholder('Select command...').addOptions(cmds);
-                    const back = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
-                    await i.editReply({ embeds: [new EmbedBuilder().setTitle('🛡️ Permissions')], components: [new ActionRowBuilder().addComponents(menu), back] });
-                    break;
-                }
-                
-                case 'setup_automod': {
-                    const { embed } = await generateSetupContent(interaction, guildId);
-                    const rules = embed.data.fields.find(f => f.name.includes('Automod'));
-                    const rulesEmbed = new EmbedBuilder().setTitle('🤖 Automod').setDescription(rules ? rules.value : 'No rules.').setColor(0x2ECC71);
-                    const actions = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('automod_add_rule').setLabel('Add Rule').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId('automod_remove_rule').setLabel('Remove Rule').setStyle(ButtonStyle.Danger),
-                        new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)
-                    );
-                    await i.editReply({ embeds: [rulesEmbed], components: [actions] });
-                    break;
-                }
-                
-                case 'setup_back_to_main': {
-                    const { embed: updatedEmbed, components: updatedComponents } = await generateSetupContent(interaction, guildId);
-                    await i.editReply({ embeds: [updatedEmbed], components: updatedComponents });
-                    break;
-                }
-                
-                case 'set_modlog': case 'set_cmdlog': case 'set_banappeal': {
-                    const type = i.customId.replace('set_', '');
-                    const menu = new ChannelSelectMenuBuilder().setCustomId(`select_${type}_channel`).setPlaceholder('Select channel...').addChannelTypes(ChannelType.GuildText);
-                    const back = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_channels').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
-                    await i.editReply({ embeds: [new EmbedBuilder().setTitle(`Set ${type} Channel`)], components: [new ActionRowBuilder().addComponents(menu), back] });
-                    break;
-                }
-            }
         });
     },
 };
