@@ -8,7 +8,7 @@ module.exports = {
         .setDescription('Force load the last backup (WARNING: STRICT RESTORE).')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     async execute(interaction) {
-        // Usamos editReply para evitar "InteractionAlreadyReplied"
+        
         
         const result = await antiNuke.restoreGuild(interaction.guild);
         

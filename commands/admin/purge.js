@@ -69,23 +69,23 @@ module.exports = {
             content = `${emojis.warn} **Note:** ${amount - deletedCount} message(s) could not be deleted because they are older than 14 days.`;
         }
         
-        // Bloque de solución para evitar el error 'Unknown Message' (10008)
+       
         try {
-            // 1. Intentar editar la respuesta de la interacción.
+            
             await interaction.editReply({ 
                 content: content,
                 embeds: [successEmbed]
             });
             
-            // 2. Si es exitoso, programar la auto-eliminación después de 5 segundos.
+        
             setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); 
         } catch (error) {
-            // 3. Manejar el error 10008 de forma sutil.
+          
             if (error.code === 10008) {
-                 // Advertencia sutil: La operación fue exitosa, solo falló la limpieza final de la respuesta.
+                
                  console.warn(`[WARN] Final purge reply expired or was deleted before successful edit/delete for interaction ${interaction.id}. (Code: 10008)`);
             } else {
-                 // Registrar otros errores inesperados.
+               
                  console.warn('[WARN] Failed to edit or delete the final purge interaction reply:', error);
             }
         }

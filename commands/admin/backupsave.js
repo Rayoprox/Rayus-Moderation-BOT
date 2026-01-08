@@ -8,7 +8,7 @@ module.exports = {
         .setDescription('Force save current server state (Overwrite backup).')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     async execute(interaction) {
-        // La interacción YA está deferida por el handler principal, así que usamos editReply directamente.
+        
         
         const result = await antiNuke.createBackup(interaction.guild);
         

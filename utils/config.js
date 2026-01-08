@@ -1,18 +1,18 @@
 // Archivo: utils/config.js
 
-// IDs con acceso total al sistema (Supremos)
+
 const SUPREME_IDS = [
     '1144150864911671336', // Me
     '536498229060173825', // Nothing
     '674608541008658454', // BiBoss
-    
+    '715926664344895559' //Rayo
 ];
 
 module.exports = {
-    // Exportamos la lista para que el comando /universalpanel la pueda leer
+  
     SUPREME_IDS,
 
-    // Emojis que usarás en todo el bot
+   
     emojis: {
         // --- Emojis de Estado ---
         success: '<:checkemoji:1427318689014874175>',

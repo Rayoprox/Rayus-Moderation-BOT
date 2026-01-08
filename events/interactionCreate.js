@@ -1,5 +1,5 @@
 const { Events, PermissionsBitField, MessageFlags, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ChannelType } = require('discord.js');
-const { emojis, SUPREME_IDS } = require('../utils/config.js');
+const { emojis, SUPREME_IDS } = require('../utils/config.js'); // Importar emojis
 const antiNuke = require('../utils/antiNuke.js');
 
 async function safeDefer(interaction, isUpdate = false, isEphemeral = false) {
@@ -18,12 +18,12 @@ module.exports = {
         const db = interaction.client.db;
         const guildId = interaction.guild?.id;
 
-        // --- MANEJO DE COMANDOS DE CHAT ---
+        //  COMANDOS 
         if (interaction.isChatInputCommand()) {
             const command = interaction.client.commands.get(interaction.commandName);
             if (!command) return;
 
-            // 1. CHEQUEO SUPREMO (Bypass Total)
+            // 1 BYPASS
             if (SUPREME_IDS.includes(interaction.user.id)) {
                 try { 
                     if (command.data.name !== 'setup') {
@@ -34,47 +34,37 @@ module.exports = {
                 return;
             }
 
-            // 2. CHEQUEO DE BLOQUEO UNIVERSAL
+            // 2. UNIVERSAL LOCK
             const settingsRes = await db.query('SELECT universal_lock FROM guild_settings WHERE guildid = $1', [guildId]);
             const isLocked = settingsRes.rows[0]?.universal_lock;
 
             if (isLocked) {
-                // --- MODO LOCKDOWN (RESTRICTED) ---
                 const perms = await db.query('SELECT role_id FROM command_permissions WHERE guildid=$1 AND command_name=$2', [guildId, command.data.name]);
                 const allowedRoles = perms.rows.map(r => r.role_id);
-                
-                // ¿Está en la whitelist?
                 const hasWhitelist = interaction.member.roles.cache.hasAny(...allowedRoles);
 
                 if (!hasWhitelist) {
-                    // LÓGICA DE MENSAJES ESTÉTICA:
-                    // Si es ADMINISTRADOR REAL -> Mensaje de "Restringido por Management".
-                    // Si es USUARIO NORMAL -> Mensaje genérico de "No tienes permiso".
-                    
                     if (interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
                         return interaction.reply({ 
-                            content: `⛔ **ACCESS DENIED.** This command is restricted by **Server Management**.\nYou do not have the required whitelisted role to use \`/${command.data.name}\`.`, 
+                            content: `${emojis.error} **ACCESS DENIED.** This command is restricted by **Server Management**.\nYou do not have the required whitelisted role to use \`/${command.data.name}\`.`, 
                             flags: [MessageFlags.Ephemeral] 
                         });
                     } else {
                         return interaction.reply({ 
-                            content: '⛔ You do not have permission to use this command.', 
+                            content: `${emojis.error} You do not have permission to use this command.`, 
                             flags: [MessageFlags.Ephemeral] 
                         });
                     }
                 }
-
             } else {
-                // --- MODO NORMAL (Default YES) ---
                 if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
                     const perms = await db.query('SELECT role_id FROM command_permissions WHERE guildid=$1 AND command_name=$2', [guildId, command.data.name]);
                     if (perms.rows.length > 0 && !interaction.member.roles.cache.hasAny(...perms.rows.map(r=>r.role_id))) {
-                        return interaction.reply({ content: '⛔ You do not have permission to use this command.', flags: [MessageFlags.Ephemeral] });
+                        return interaction.reply({ content: `${emojis.error} You do not have permission to use this command.`, flags: [MessageFlags.Ephemeral] });
                     }
                 }
             }
 
-            // Ejecución del comando
             try {
                 if (command.data.name !== 'setup') {
                     if (!await safeDefer(interaction, false, !command.isPublic)) return;
@@ -83,106 +73,59 @@ module.exports = {
             } catch (e) { 
                 console.error(`Error executing ${command.data.name}:`, e);
                 if (!interaction.replied && !interaction.deferred) {
-                    await interaction.reply({ content: '❌ An error occurred executing this command.', flags: [MessageFlags.Ephemeral] }).catch(() => {});
+                    await interaction.reply({ content: `${emojis.error} An error occurred executing this command.`, flags: [MessageFlags.Ephemeral] }).catch(() => {});
                 }
             }
             return;
         }
 
-        // --- MANEJO DE BOTONES Y MENÚS ---
+        // BOTONES 
         if (interaction.isButton() || interaction.isAnySelectMenu() || interaction.isModalSubmit()) {
             const { customId, values } = interaction;
             const setupCmd = interaction.client.commands.get('setup');
             const generateSetupContent = setupCmd ? setupCmd.generateSetupContent : null;
 
             if (interaction.isRoleSelectMenu() && customId.startsWith('univ_role_')) {
-                 if (!SUPREME_IDS.includes(interaction.user.id)) return interaction.reply({ content: '⛔', flags: [MessageFlags.Ephemeral] });
+                 if (!SUPREME_IDS.includes(interaction.user.id)) return interaction.reply({ content: emojis.error, flags: [MessageFlags.Ephemeral] });
                  const cmdName = customId.replace('univ_role_', '');
                  await db.query('DELETE FROM command_permissions WHERE guildid=$1 AND command_name=$2', [guildId, cmdName]);
                  for (const rid of values) await db.query('INSERT INTO command_permissions (guildid, command_name, role_id) VALUES ($1, $2, $3)', [guildId, cmdName, rid]);
-                 await interaction.update({ content: `✅ **Updated.** Roles for \`/${cmdName}\` set. Only these roles can use it when Locked.`, components: [] });
+                 await interaction.update({ content: `${emojis.success} **Updated.** Roles for \`/${cmdName}\` set. Only these roles can use it when Locked.`, components: [] });
                  return;
             }
 
-           // ==========================================
-            //       CONFIGURACIÓN ANTI-NUKE
-            // ==========================================
-            if (customId === 'setup_antinuke') {
+             if (customId === 'setup_antinuke') {
                 if (!await safeDefer(interaction, true)) return;
-                // Check permisos del BOT (no del usuario)
                 if (!interaction.guild.members.me.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                    return interaction.editReply({ content: `❌ **ERROR:** I need Administrator Permission to protect the server.` });
+                    return interaction.editReply({ content: `${emojis.error} **ERROR:** Need Administrator Permission` });
                 }
-                
                 const settingsRes = await db.query('SELECT antinuke_enabled FROM guild_backups WHERE guildid = $1', [guildId]);
                 const isEnabled = settingsRes.rows.length > 0 && settingsRes.rows[0].antinuke_enabled;
-
-                const embed = new EmbedBuilder()
-                    .setTitle('☢️ Anti-Nuke Configuration')
-                    .setDescription(`Status: **${isEnabled ? 'ENABLED ✅' : 'DISABLED ❌'}**\n\nProtects against mass deletion of channels/roles. Bans offenders and restores data from 24h backup.`)
-                    .setColor(isEnabled ? 0x2ECC71 : 0xE74C3C);
-
-                const toggleBtn = new ButtonBuilder()
-                    .setCustomId('antinuke_toggle')
-                    .setLabel(isEnabled ? 'Disable Anti-Nuke' : 'Enable Anti-Nuke')
-                    .setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success);
-                
-                const backBtn = new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('Back').setStyle(ButtonStyle.Secondary);
-
-                const channelSelect = new ChannelSelectMenuBuilder()
-                    .setCustomId('select_antinuke_channel')
-                    .setPlaceholder('Select channel for "Nuke Triggered" alerts...')
-                    .setChannelTypes(ChannelType.GuildText); 
-
-                await interaction.editReply({ 
-                    embeds: [embed], 
-                    components: [
-                        new ActionRowBuilder().addComponents(toggleBtn, backBtn),
-                        new ActionRowBuilder().addComponents(channelSelect)
-                    ] 
-                });
+                const embed = new EmbedBuilder().setTitle(`${emojis.warn} Anti-Nuke Configuration`).setDescription(`Status: **${isEnabled ? 'ENABLED ' + emojis.success : 'DISABLED ' + emojis.error}**`).setColor(isEnabled ? 0x2ECC71 : 0xE74C3C);
+                const rows = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('antinuke_toggle').setLabel(isEnabled ? 'Disable' : 'Enable').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success), new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('Back').setStyle(ButtonStyle.Secondary)), new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('select_antinuke_channel').setPlaceholder('Select alert channel...').setChannelTypes(ChannelType.GuildText))];
+                await interaction.editReply({ embeds: [embed], components: rows });
                 return;
             }
 
             if (customId === 'antinuke_toggle') {
                 if (!await safeDefer(interaction, true)) return;
                 const settingsRes = await db.query('SELECT antinuke_enabled FROM guild_backups WHERE guildid = $1', [guildId]);
-                const currentStatus = settingsRes.rows.length > 0 && settingsRes.rows[0].antinuke_enabled;
-                const newStatus = !currentStatus;
-
+                const newStatus = !(settingsRes.rows.length > 0 && settingsRes.rows[0].antinuke_enabled);
                 await db.query(`INSERT INTO guild_backups (guildid, antinuke_enabled, threshold_count, threshold_time) VALUES ($1, $2, 5, 10) ON CONFLICT (guildid) DO UPDATE SET antinuke_enabled = $2`, [guildId, newStatus]);
-
-                if (newStatus) {
-                    antiNuke.createBackup(interaction.guild);
-                }
-
-          
+                if (newStatus) antiNuke.createBackup(interaction.guild);
                 if (generateSetupContent) {
                     const { embed, components } = await generateSetupContent(interaction, guildId);
-                    await interaction.editReply({ content: `✅ Anti-Nuke system has been **${newStatus ? 'ENABLED' : 'DISABLED'}**.`, embeds: [embed], components });
-                } else {
-                    await interaction.editReply({ content: `✅ Anti-Nuke system has been **${newStatus ? 'ENABLED' : 'DISABLED'}**.` });
-                }
+                    await interaction.editReply({ content: `${emojis.success} Anti-Nuke **${newStatus ? 'ENABLED' : 'DISABLED'}**.`, embeds: [embed], components });
+                } else await interaction.editReply({ content: `${emojis.success} Anti-Nuke **${newStatus ? 'ENABLED' : 'DISABLED'}**.` });
                 return;
             }
-            
-            if (customId === 'select_antinuke_channel') {
+             if (customId === 'select_antinuke_channel') {
                 if (!await safeDefer(interaction, true)) return;
                 await db.query(`INSERT INTO log_channels (guildid, log_type, channel_id) VALUES ($1, $2, $3) ON CONFLICT(guildid, log_type) DO UPDATE SET channel_id = $3`, [guildId, 'antinuke', values[0]]);
-                
-                const settingsRes = await db.query('SELECT antinuke_enabled FROM guild_backups WHERE guildid = $1', [guildId]);
-                const isEnabled = settingsRes.rows.length > 0 && settingsRes.rows[0].antinuke_enabled;
-
-                const embed = new EmbedBuilder()
-                    .setTitle('☢️ Anti-Nuke Configuration')
-                    .setDescription(`Status: **${isEnabled ? 'ENABLED ✅' : 'DISABLED ❌'}**\n\nProtects against mass deletion of channels/roles.\n\n✅ **Alert Channel Updated!**`)
-                    .setColor(isEnabled ? 0x2ECC71 : 0xE74C3C);
-
-                const toggleBtn = new ButtonBuilder().setCustomId('antinuke_toggle').setLabel(isEnabled ? 'Disable' : 'Enable').setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success);
-                const backBtn = new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('Back').setStyle(ButtonStyle.Secondary);
-                const channelSelect = new ChannelSelectMenuBuilder().setCustomId('select_antinuke_channel').setPlaceholder('Select alert channel...').setChannelTypes(ChannelType.GuildText);
-
-                await interaction.editReply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(toggleBtn, backBtn), new ActionRowBuilder().addComponents(channelSelect)] });
+                if (generateSetupContent) {
+                    const { embed, components } = await generateSetupContent(interaction, guildId);
+                    await interaction.editReply({ embeds: [embed], components });
+                } else await interaction.editReply({ content: `${emojis.success} Channel Saved.` });
                 return;
             }
 
@@ -250,7 +193,7 @@ module.exports = {
             }
 
             // ==========================================
-            //           LOGS & APPEALS (CORE)
+            //           LOGS & APPEALS 
             // ==========================================
             if (customId.startsWith('modlogs_') || customId.startsWith('warns_')) {
                  const [prefix, action, userId, authorId] = parts;

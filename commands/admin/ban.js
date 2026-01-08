@@ -41,7 +41,7 @@ module.exports = {
         const cleanReason = reason.trim();
         const currentTimestamp = Date.now();
         
-        // --- VERIFICACIONES 
+        //  VERIFICACIONES 
         if (targetUser.id === interaction.user.id) return interaction.editReply({ content: '❌ You cannot ban yourself.', flags: [MessageFlags.Ephemeral] });
         if (targetUser.id === interaction.client.user.id) return interaction.editReply({ content: '❌ You cannot ban me.', flags: [MessageFlags.Ephemeral] });
         if (targetUser.id === interaction.guild.ownerId) return interaction.editReply({ content: '❌ You cannot ban the server owner.', flags: [MessageFlags.Ephemeral] });

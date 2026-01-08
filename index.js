@@ -7,7 +7,7 @@ console.log(`--- BOT STARTING UP at ${new Date().toISOString()} ---`);
 const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const db = require('./utils/db.js'); // Ahora db se carga DESPUÉS de dotenv
+const db = require('./utils/db.js'); 
 const { startScheduler, resumePunishmentsOnStart } = require('./utils/temporary_punishment_handler.js'); 
 const http = require('http');
 
@@ -43,7 +43,7 @@ for (const folder of commandFolders) {
     }
 }
 
-// event
+
 const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
 
@@ -57,7 +57,7 @@ for (const file of eventFiles) {
     }
 }
 
-// database
+
 (async () => {
     try {
         await db.ensureTables();
@@ -70,7 +70,6 @@ for (const file of eventFiles) {
     }
 })();
 
-// render
 const PORT = process.env.PORT || 3000; 
 
 const server = http.createServer((req, res) => {
@@ -85,16 +84,16 @@ server.listen(PORT, () => {
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('⚠️ Unhandled Rejection:', reason);
-    // No salir del proceso
+   
 });
 
 process.on('uncaughtException', (error) => {
     console.error('⚠️ Uncaught Exception:', error);
-    // No salir del proceso
+    
 });
 
 process.on('unhandledRejection', (reason, p) => {
-    // Ignorar errores de "Interacción ya respondida" o "Unknown Message" (comunes en lag)
+    
     if (reason?.code === 10062 || reason?.code === 40060 || reason?.code === 10008) return;
     console.log(' [ANTI-CRASH] Unhandled Rejection/Catch');
     console.log(reason, p);

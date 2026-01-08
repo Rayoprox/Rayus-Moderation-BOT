@@ -20,7 +20,7 @@ module.exports = {
                     { name: 'Remove', value: 'remove' }
                 )),
     async execute(interaction) {
-        // NO hacemos deferReply aquí porque interactionCreate.js ya lo hizo (Protección 15 min activada)
+       
         
         const id = interaction.options.getString('id');
         const action = interaction.options.getString('action');

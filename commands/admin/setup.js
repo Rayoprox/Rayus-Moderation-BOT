@@ -73,8 +73,7 @@ module.exports = {
     generateSetupContent,
 
     async execute(interaction) {
-        // --- 🔴 CORRECCIÓN AQUÍ: DEFERIR RESPUESTA ---
-        // Como interactionCreate ignora /setup, tenemos que deferir manualmente aquí.
+        
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
         const guildId = interaction.guild.id;
@@ -85,7 +84,7 @@ module.exports = {
             components: mainComponents
         });
 
-        // --- FILTRO IMPORTANTE (LISTA BLANCA) ---
+        // FiltRo
         const handledIds = [
             'cancel_setup', 
             'delete_all_data', 
@@ -95,7 +94,7 @@ module.exports = {
             'select_staff_roles',
             'setup_permissions', 
             'select_command_perms',
-            'setup_automod', // Solo entrar al menú, no añadir/quitar reglas
+            'setup_automod', 
             'setup_back_to_main'
         ];
 
@@ -106,7 +105,7 @@ module.exports = {
         collector.on('collect', async i => {
             if (i.user.id !== interaction.user.id) return i.reply({ content: "❌ Only command author.", flags: [MessageFlags.Ephemeral] });
 
-            // SI EL BOTÓN NO ES MÍO, NO LO TOCO (Dejo que interactionCreate lo maneje)
+           
             if (!handledIds.includes(i.customId)) return;
 
             try { await i.deferUpdate(); } catch (e) { return; }
