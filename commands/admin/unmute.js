@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, MessageFlags } =
 const db = require('../../utils/db.js');
 const { initializeTimerMap } = require('../../utils/temporary_punishment_handler.js');
 const { emojis } = require('../../utils/config.js');    
+const { success, error } = require('../../utils/embedFactory.js'); // IMPORTAMOS LA FÁBRICA
 
 const UNMUTE_COLOR = 0x2ECC71;
 
@@ -27,19 +28,16 @@ module.exports = {
         const currentTimestamp = Date.now();
 
         const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-        if (!targetMember) {
-            return interaction.editReply({ content: '❌ User is not in the server.', flags: [MessageFlags.Ephemeral] });
-        }
-
-        if (!targetMember.isCommunicationDisabled()) {
-            return interaction.editReply({ content: '❌ This user is not currently muted.', flags: [MessageFlags.Ephemeral] });
-        }
+        
+        // VALIDACIONES CON FÁBRICA
+        if (!targetMember) return interaction.editReply({ embeds: [error('User is not in the server.')] });
+        if (!targetMember.isCommunicationDisabled()) return interaction.editReply({ embeds: [error('This user is not currently muted.')] });
 
         try {
             await targetMember.timeout(null, `Manually unmuted by ${moderatorTag}. Reason: ${cleanReason}`);
-        } catch (error) {
-            console.error('Failed to unmute user:', error);
-            return interaction.editReply({ content: '❌ An error occurred. Please check my permissions and role hierarchy.', flags: [MessageFlags.Ephemeral] });
+        } catch (err) {
+            console.error('Failed to unmute user:', err);
+            return interaction.editReply({ embeds: [error('An error occurred. Please check my permissions.')] });
         }
 
         const activeTimeoutsResult = await db.query(`SELECT caseid FROM modlogs WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND action = 'TIMEOUT'`, [guildId, targetUser.id]);
@@ -47,23 +45,18 @@ module.exports = {
             if (interaction.client.punishmentTimers.has(row.caseid)) {
                 clearTimeout(interaction.client.punishmentTimers.get(row.caseid));
                 interaction.client.punishmentTimers.delete(row.caseid);
-                console.log(`[TIMER] Cleared active timer for Case ID ${row.caseid} due to /unmute command.`);
             }
         }
 
         await db.query(`UPDATE modlogs SET status = 'EXPIRED', "endsat" = NULL WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND action = 'TIMEOUT'`, [guildId, targetUser.id]);
 
         const unmuteCaseId = `CASE-${currentTimestamp}`;
-        await db.query(`
-            INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, appealable, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        `, [unmuteCaseId, guildId, 'UNMUTE', targetUser.id, targetUser.tag, interaction.user.id, cleanModeratorTag, cleanReason, currentTimestamp, 0, 'EXECUTED']);
+        await db.query(`INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, appealable, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [unmuteCaseId, guildId, 'UNMUTE', targetUser.id, targetUser.tag, interaction.user.id, cleanModeratorTag, cleanReason, currentTimestamp, 0, 'EXECUTED']);
 
+        // LOGGING
         const modLogResult = await db.query("SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = 'modlog'", [guildId]);
-        const modLogChannelId = modLogResult.rows[0]?.channel_id;
-        
-        if (modLogChannelId) {
-            const channel = interaction.guild.channels.cache.get(modLogChannelId);
+        if (modLogResult.rows[0]?.channel_id) {
+            const channel = interaction.guild.channels.cache.get(modLogResult.rows[0].channel_id);
             if(channel){
                const modLogEmbed = new EmbedBuilder().setColor(UNMUTE_COLOR).setAuthor({ name: `${targetUser.tag} has been UNMUTED`, iconURL: targetUser.displayAvatarURL({ dynamic: true }) }).addFields(
                     { name: `${emojis.user} User`, value: `<@${targetUser.id}> (\`${targetUser.id}\`)`, inline: true },
@@ -71,14 +64,18 @@ module.exports = {
                     { name: `${emojis.reason} Reason`, value: cleanReason, inline: false }
                 ).setFooter({ text: `Case ID: ${unmuteCaseId}` }).setTimestamp();
                 const sentMessage = await channel.send({ embeds: [modLogEmbed] }).catch(console.error);
-                if (sentMessage) { await db.query("UPDATE modlogs SET logmessageid = $1 WHERE caseid = $2", [sentMessage.id, unmuteCaseId]); }
+                if (sentMessage) await db.query("UPDATE modlogs SET logmessageid = $1 WHERE caseid = $2", [sentMessage.id, unmuteCaseId]); 
             }
         }
         
-       const publicEmbed = new EmbedBuilder().setColor(UNMUTE_COLOR).setTitle(`${emojis.unmute} Unmute Successful`).setDescription(`**${targetUser.tag}**'s communication privileges have been **restored**.`).addFields(
-            { name: `${emojis.moderator} Moderator`, value: `<@${interaction.user.id}>` },
-            { name: `${emojis.reason} Reason`, value: cleanReason }
-        ).setFooter({ text: `User ID: ${targetUser.id}` }).setTimestamp();
+        // RESPUESTA PÚBLICA USANDO FÁBRICA
+        const publicEmbed = success(`**${targetUser.tag}**'s communication privileges have been **restored**.`)
+            .setTitle(`${emojis.unmute} Unmute Successful`)
+            .addFields(
+                { name: `${emojis.moderator} Moderator`, value: `<@${interaction.user.id}>` },
+                { name: `${emojis.reason} Reason`, value: cleanReason }
+            )
+            .setFooter({ text: `User ID: ${targetUser.id}` });
         
         await interaction.editReply({ embeds: [publicEmbed] });
     },

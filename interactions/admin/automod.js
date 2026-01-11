@@ -2,17 +2,18 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const ms = require('ms');
 const { emojis } = require('../../utils/config.js');
 const { safeDefer } = require('../../utils/interactionHelpers.js');
+// IMPORTAMOS LA FÁBRICA AQUÍ 👇
+const { success, error } = require('../../utils/embedFactory.js');
 
 module.exports = async (interaction) => {
     const { customId, guild, client, values } = interaction;
     const db = client.db;
     const guildId = guild.id;
     
-    // Setup helper para volver atrás (si vienes desde /setup)
     const setupCommand = client.commands.get('setup');
     const generateSetupContent = setupCommand?.generateSetupContent;
 
-    // 1. INICIO: Menú de selección de acción
+    // 1. INICIO
     if (customId === 'automod_add_rule') {
         if (!await safeDefer(interaction, true)) return;
         const menu = new StringSelectMenuBuilder()
@@ -32,7 +33,7 @@ module.exports = async (interaction) => {
         return;
     }
 
-    // 2. PANEL PRINCIPAL AUTOMOD
+    // 2. PANEL PRINCIPAL
     if (customId === 'setup_automod') { 
         if (!await safeDefer(interaction, true)) return;
         const btns = new ActionRowBuilder().addComponents(
@@ -46,7 +47,6 @@ module.exports = async (interaction) => {
             let durationText = '';
             if (r.action_type === 'BAN') durationText = r.action_duration ? `(${r.action_duration})` : '(Permanent)';
             if (r.action_type === 'MUTE') durationText = `(${r.action_duration})`;
-            
             return `• **${r.warnings_count} Warns:** ${r.action_type} ${durationText}`;
         }).join('\n') || "No rules configured.";
 
@@ -57,7 +57,7 @@ module.exports = async (interaction) => {
         return;
     }
 
-    // 3. SELECCIÓN DE CANTIDAD DE WARNS
+    // 3. SELECCIÓN WARNS
     if (customId === 'automod_action_select') {
         if (!await safeDefer(interaction, true)) return;
         const action = values[0];
@@ -68,27 +68,23 @@ module.exports = async (interaction) => {
         return;
     }
 
-    // 4. PROCESAR WARNS -> MOSTRAR MODAL O GUARDAR (KICK)
+    // 4. PROCESAR WARNS (Kick o Modal)
     if (customId === 'automod_warn_select') {
         const [warnCountStr, actionType] = values[0].split(':');
         const warnCount = parseInt(warnCountStr, 10);
 
-        // KICK no necesita duración, guardamos directo
         if (actionType === 'KICK') {
             await safeDefer(interaction, true);
             await saveRule(db, guildId, warnCount, actionType, null);
             
             if (generateSetupContent) {
                 const { embed, components } = await generateSetupContent(interaction, guildId);
-                await interaction.editReply({ content: `✅ Automod rule saved: **${warnCount} Warns -> KICK**`, embeds: [embed], components });
-            } else await interaction.editReply({ content: `✅ Automod rule saved.` });
+                // 👇 USO DE LA FÁBRICA (SUCCESS)
+                await interaction.editReply({ content: null, embeds: [success(`Automod rule saved: **${warnCount} Warns -> KICK**`), embed], components });
+            } else await interaction.editReply({ embeds: [success(`Automod rule saved.`)] });
             return;
-        } 
-        
-        // BAN y MUTE necesitan duración -> Modal
-        else {
+        } else {
             const modal = new ModalBuilder().setCustomId(`automod_duration_modal:${warnCountStr}:${actionType}`).setTitle(`Set Duration for ${actionType}`);
-            
             let placeholder = 'e.g., 1d, 6h, 30m';
             let label = 'Duration';
             
@@ -103,18 +99,18 @@ module.exports = async (interaction) => {
             modal.addComponents(new ActionRowBuilder().addComponents(
                 new TextInputBuilder().setCustomId('duration_value').setLabel(label).setPlaceholder(placeholder).setStyle(TextInputStyle.Short).setRequired(true)
             ));
-            
             await interaction.showModal(modal);
             return;
         }
     }
 
-    // 5. REMOVE RULES (Menú)
+    // 5. REMOVE MENU
     if (customId === 'automod_remove_rule') {
         if (!await safeDefer(interaction, false, true)) return;
         const rulesResult = await db.query('SELECT rule_order, warnings_count, action_type, action_duration FROM automod_rules WHERE guildid = $1 ORDER BY warnings_count ASC', [guildId]);
         
-        if (rulesResult.rows.length === 0) return interaction.editReply({ content: '❌ No rules found to remove.' });
+        // 👇 USO DE LA FÁBRICA (ERROR)
+        if (rulesResult.rows.length === 0) return interaction.editReply({ embeds: [error('No rules found to remove.')] });
         
         const options = rulesResult.rows.map(rule => ({ 
             label: `Rule #${rule.rule_order}: ${rule.warnings_count} warns -> ${rule.action_type}`, 
@@ -135,15 +131,14 @@ module.exports = async (interaction) => {
         
         if (generateSetupContent) {
             const { embed, components } = await generateSetupContent(interaction, guildId);
-            await interaction.editReply({ content: `✅ Rule deleted.`, embeds: [embed], components });
-        } else await interaction.editReply('✅ Deleted');
+            // 👇 USO DE LA FÁBRICA (SUCCESS)
+            await interaction.editReply({ content: null, embeds: [success(`Rule deleted.`), embed], components });
+        } else await interaction.editReply({ embeds: [success('Deleted.')] });
         return;
     }
 
-    // 7. PROCESAR MODAL DE DURACIÓN (VALIDACIÓN ESTRICTA)
+    // 7. PROCESAR MODAL (VALIDACIONES CON FÁBRICA)
     if (customId.startsWith('automod_duration_modal:')) {
-        // Importante: No usar deferReply aquí porque venimos de un ModalSubmit, el editReply funcionará si tardamos poco, 
-        // pero mejor asegurar con safeDefer(true) para "pensar"
         if (!await safeDefer(interaction, true)) return;
 
         const [, warnCountStr, actionType] = customId.split(':');
@@ -153,54 +148,49 @@ module.exports = async (interaction) => {
         let finalDuration = durationStr;
         const msDuration = ms(durationStr);
 
-        // --- VALIDACIÓN PARA BAN ---
+        // --- VALIDACIÓN BAN ---
         if (actionType === 'BAN') {
             if (durationStr === '0') {
-                // Ban Permanente
                 finalDuration = null; 
             } else {
-                // Ban Temporal (debe ser válido)
                 if (!msDuration || msDuration <= 0) {
-                    return interaction.editReply({ content: `${emojis.error} **Invalid Duration.**\nFor a temporary ban, use format like \`7d\`, \`24h\`.\nFor **Permanent**, type \`0\`.` });
+                    // 👇 USO DE LA FÁBRICA (ERROR)
+                    return interaction.editReply({ embeds: [error(`**Invalid Duration.**\nFor a temporary ban, use format like \`7d\`, \`24h\`.\nFor **Permanent**, type \`0\`.`)] });
                 }
                 finalDuration = durationStr;
             }
         } 
         
-        // --- VALIDACIÓN PARA MUTE (TIMEOUT) ---
+        // --- VALIDACIÓN MUTE ---
         else if (actionType === 'MUTE') {
-            // Validación estricta de Discord Timeout
             if (!msDuration) {
-                return interaction.editReply({ content: `${emojis.error} **Invalid Duration.** Please use a valid format like \`10m\`, \`1h\`, \`1d\`.` });
+                // 👇 USO DE LA FÁBRICA (ERROR)
+                return interaction.editReply({ embeds: [error(`**Invalid Duration.** Please use a valid format like \`10m\`, \`1h\`, \`1d\`.`)] });
             }
-            if (msDuration < 10000) { // Mínimo 10 segundos (Discord API limit)
-                return interaction.editReply({ content: `${emojis.error} **Too Short.** Minimum timeout is 10 seconds.` });
+            if (msDuration < 10000) { 
+                return interaction.editReply({ embeds: [error(`**Too Short.** Minimum timeout is 10 seconds.`)] });
             }
-            if (msDuration > 2419200000) { // Máximo 28 días (Discord API limit)
-                return interaction.editReply({ content: `${emojis.error} **Too Long.** Discord Timeouts cannot exceed 28 days.` });
+            if (msDuration > 2419200000) { 
+                return interaction.editReply({ embeds: [error(`**Too Long.** Discord Timeouts cannot exceed 28 days.`)] });
             }
             finalDuration = durationStr;
         }
 
-        // GUARDAR EN BASE DE DATOS
         await saveRule(db, guildId, warnCount, actionType, finalDuration);
 
         if (generateSetupContent) {
             const { embed, components } = await generateSetupContent(interaction, guildId);
-            await interaction.editReply({ content: `✅ Automod Rule Saved: **${warnCount} Warns -> ${actionType}** (${finalDuration || 'Permanent'})`, embeds: [embed], components });
-        } else await interaction.editReply({ content: `✅ Saved.` });
+            // 👇 USO DE LA FÁBRICA (SUCCESS)
+            await interaction.editReply({ content: null, embeds: [success(`Automod Rule Saved: **${warnCount} Warns -> ${actionType}** (${finalDuration || 'Permanent'})`), embed], components });
+        } else await interaction.editReply({ embeds: [success(`Saved.`)] });
         return;
     }
 };
 
-// Función auxiliar para guardar/actualizar regla evitando duplicados
 async function saveRule(db, guildId, warnCount, actionType, duration) {
-    // Calculamos el siguiente orden si es nueva
     const maxOrderResult = await db.query('SELECT MAX(rule_order) FROM automod_rules WHERE guildid = $1', [guildId]);
     const nextRuleOrder = (maxOrderResult.rows[0].max || 0) + 1;
 
-    // Usamos UPSERT (ON CONFLICT) basado en la constraint única (guildid, warnings_count)
-    // Así si ya existe una regla para "3 warns", se actualiza en lugar de crear otra.
     await db.query(`
         INSERT INTO automod_rules (guildid, rule_order, warnings_count, action_type, action_duration) 
         VALUES ($1, $2, $3, $4, $5) 

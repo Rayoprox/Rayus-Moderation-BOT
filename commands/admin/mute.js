@@ -3,9 +3,9 @@ const db = require('../../utils/db.js');
 const ms = require('ms');
 const { resumePunishmentsOnStart } = require('../../utils/temporary_punishment_handler.js');
 const { emojis } = require('../../utils/config.js');
+const { success, error } = require('../../utils/embedFactory.js'); // IMPORTAMOS LA FÁBRICA
 
 const MUTE_COLOR = 0xFFA500; 
-const SUCCESS_COLOR = 0x2ECC71; 
 
 module.exports = {
     deploy: 'main',
@@ -26,37 +26,29 @@ module.exports = {
         const guildId = interaction.guild.id;
 
         const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-        if (!targetMember) {
-            return interaction.editReply({ content: '❌ User is not in the server.', flags: [MessageFlags.Ephemeral] });
-        }
-
-        if (targetUser.id === interaction.user.id) return interaction.editReply({ content: '❌ You cannot mute yourself.', flags: [MessageFlags.Ephemeral] });
-        if (targetUser.id === interaction.client.user.id) return interaction.editReply({ content: '❌ You cannot mute me.', flags: [MessageFlags.Ephemeral] });
-        if (targetUser.id === interaction.guild.ownerId) return interaction.editReply({ content: '❌ You cannot mute the server owner.', flags: [MessageFlags.Ephemeral] });
-        if (targetMember.isCommunicationDisabled()) return interaction.editReply({ content: '❌ This user is already muted.', flags: [MessageFlags.Ephemeral] });
+        
+        // VALIDACIONES CON FÁBRICA
+        if (!targetMember) return interaction.editReply({ embeds: [error('User is not in the server.')] });
+        if (targetUser.id === interaction.user.id) return interaction.editReply({ embeds: [error('You cannot mute yourself.')] });
+        if (targetUser.id === interaction.client.user.id) return interaction.editReply({ embeds: [error('You cannot mute me.')] });
+        if (targetUser.id === interaction.guild.ownerId) return interaction.editReply({ embeds: [error('You cannot mute the server owner.')] });
+        if (targetMember.isCommunicationDisabled()) return interaction.editReply({ embeds: [error('This user is already muted.')] });
         
         const guildSettingsResult = await db.query('SELECT staff_roles FROM guild_settings WHERE guildid = $1', [guildId]);
         const guildSettings = guildSettingsResult.rows[0];
         
         const staffIds = guildSettings?.staff_roles ? guildSettings.staff_roles.split(',') : [];
-        if (targetMember.roles.cache.some(r => staffIds.includes(r.id))) return interaction.editReply({ content: '❌ You cannot moderate a staff member.', flags: [MessageFlags.Ephemeral] });
-        if (moderatorMember.roles.highest.position <= targetMember.roles.highest.position) return interaction.editReply({ content: '❌ You cannot mute a user with a role equal to or higher than your own.', flags: [MessageFlags.Ephemeral] });
+        if (targetMember.roles.cache.some(r => staffIds.includes(r.id))) return interaction.editReply({ embeds: [error('You cannot moderate a staff member.')] });
+        if (moderatorMember.roles.highest.position <= targetMember.roles.highest.position) return interaction.editReply({ embeds: [error('You cannot mute a user with a role equal to or higher than your own.')] });
         
         let durationMs;
-        try {
-            durationMs = ms(durationStr);
-        } catch (e) {
-            return interaction.editReply({ content: '❌ Invalid duration format. Use formats like "10m", "1h", "2d".', flags: [MessageFlags.Ephemeral] });
-        }
+        try { durationMs = ms(durationStr); } catch (e) { return interaction.editReply({ embeds: [error('Invalid duration format. Use formats like "10m", "1h".')] }); }
 
-        if (!durationMs || durationMs < 5000 || durationMs > 2419200000) { // de 5 segundos a 28 dias (limite de discord)
-            return interaction.editReply({ content: '❌ Duration must be between 5 seconds and 28 days.', flags: [MessageFlags.Ephemeral] });
-        }
+        if (!durationMs || durationMs < 5000 || durationMs > 2419200000) return interaction.editReply({ embeds: [error('Duration must be between 5 seconds and 28 days.')] });
 
         const endsAt = Date.now() + durationMs;
         const caseId = `CASE-${Date.now()}`;
         const moderatorTag = interaction.user.tag;
-        
         const cleanModeratorTag = moderatorTag.trim();
         const cleanReason = reason.trim();
         const currentTimestamp = Date.now();
@@ -77,16 +69,13 @@ module.exports = {
                 .setTimestamp(endsAt);
             await targetUser.send({ embeds: [dmEmbed] });
             dmSent = true;
-        } catch (error) {
-            dmSent = false;
-            console.warn(`[WARN] Could not send DM to ${targetUser.tag}.`);
-        }
+        } catch (error) { dmSent = false; }
 
         try {
             await targetMember.timeout(durationMs, `[CMD] ${cleanReason} (Moderator: ${cleanModeratorTag})`);
-        } catch (error) {
-            console.error('[ERROR] Failed to execute timeout:', error);
-            return interaction.editReply({ content: '❌ An error occurred. Please check my permissions and role hierarchy.', flags: [MessageFlags.Ephemeral] });
+        } catch (err) {
+            console.error('[ERROR] Failed to execute timeout:', err);
+            return interaction.editReply({ embeds: [error('An error occurred. Please check my permissions.')] });
         }
 
         await db.query(`
@@ -99,11 +88,10 @@ module.exports = {
 
         resumePunishmentsOnStart(interaction.client); 
 
+        // LOGGING
         const modLogResult = await db.query("SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = $2", [guildId, 'modlog']);
-        const modLogChannelId = modLogResult.rows[0]?.channel_id;
-
-        if (modLogChannelId) {
-            const channel = interaction.guild.channels.cache.get(modLogChannelId);
+        if (modLogResult.rows[0]?.channel_id) {
+            const channel = interaction.guild.channels.cache.get(modLogResult.rows[0].channel_id);
             if(channel) {
                 const modLogEmbed = new EmbedBuilder()
                     .setColor(MUTE_COLOR)
@@ -117,19 +105,14 @@ module.exports = {
                     )
                     .setFooter({ text: `Case ID: ${caseId}` })
                     .setTimestamp();
-                
                 const sentMessage = await channel.send({ embeds: [modLogEmbed] }).catch(console.error);
-                
-                if (sentMessage) {
-                    await db.query("UPDATE modlogs SET logmessageid = $1 WHERE caseid = $2", [sentMessage.id, caseId]);
-                }
+                if (sentMessage) await db.query("UPDATE modlogs SET logmessageid = $1 WHERE caseid = $2", [sentMessage.id, caseId]);
             }
         }
         
-        const publicEmbed = new EmbedBuilder()
-            .setColor(SUCCESS_COLOR) 
-            .setTitle(`${emojis.success} Mute Successfully Applied`)
-            .setDescription(`**${targetUser.tag}** has been **timed out** successfully.`)
+        // RESPUESTA PÚBLICA USANDO FÁBRICA
+        const publicEmbed = success(`**${targetUser.tag}** has been **timed out** successfully.`)
+            .setTitle(`${emojis.success} Mute Applied`)
             .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 64 }))
             .addFields(
                 { name: `${emojis.moderator} Moderator`, value: `<@${interaction.user.id}>`, inline: true }, 
@@ -139,6 +122,7 @@ module.exports = {
             )
             .setFooter({ text: `Timeout ends:` })
             .setTimestamp(endsAt); 
+            
         await interaction.editReply({ embeds: [publicEmbed] });
     },
 };

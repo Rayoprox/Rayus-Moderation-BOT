@@ -1,9 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const db = require('../../utils/db.js');
 const { emojis } = require('../../utils/config.js');
+const { success, error } = require('../../utils/embedFactory.js'); // IMPORTAMOS LA FÁBRICA
 
 const KICK_COLOR = 0xE67E22; 
-const SUCCESS_COLOR = 0x2ECC71; 
 
 module.exports = {
     deploy: 'main',
@@ -23,22 +23,22 @@ module.exports = {
 
         const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
         
-        if (!targetMember) return interaction.editReply({ content: `${emojis.error} User is not in the server.`, flags: [MessageFlags.Ephemeral] });
-        if (targetUser.id === interaction.user.id) return interaction.editReply({ content: `${emojis.error} You cannot kick yourself.`, flags: [MessageFlags.Ephemeral] });
-        if (targetUser.id === interaction.client.user.id) return interaction.editReply({ content: `${emojis.error} You cannot kick me.`, flags: [MessageFlags.Ephemeral] });
-        if (targetUser.id === interaction.guild.ownerId) return interaction.editReply({ content: `${emojis.error} You cannot kick the server owner.`, flags: [MessageFlags.Ephemeral] });
+        // VALIDACIONES CON FÁBRICA
+        if (!targetMember) return interaction.editReply({ embeds: [error('User is not in the server.')] });
+        if (targetUser.id === interaction.user.id) return interaction.editReply({ embeds: [error('You cannot kick yourself.')] });
+        if (targetUser.id === interaction.client.user.id) return interaction.editReply({ embeds: [error('You cannot kick me.')] });
+        if (targetUser.id === interaction.guild.ownerId) return interaction.editReply({ embeds: [error('You cannot kick the server owner.')] });
         
         const guildSettingsResult = await db.query('SELECT staff_roles FROM guild_settings WHERE guildid = $1', [guildId]);
         const guildSettings = guildSettingsResult.rows[0];
         
         const staffIds = guildSettings?.staff_roles ? guildSettings.staff_roles.split(',') : [];
-        if (targetMember.roles.cache.some(r => staffIds.includes(r.id))) return interaction.editReply({ content: `${emojis.error} You cannot moderate a staff member.`, flags: [MessageFlags.Ephemeral] });
-        if (moderatorMember.roles.highest.position <= targetMember.roles.highest.position) return interaction.editReply({ content: `${emojis.error} You cannot kick a user with a role equal to or higher than your own.`, flags: [MessageFlags.Ephemeral] });
-        if (!targetMember.kickable) return interaction.editReply({ content: `${emojis.error} I do not have permission to kick this user (their role is likely higher than mine).`, flags: [MessageFlags.Ephemeral] });
+        if (targetMember.roles.cache.some(r => staffIds.includes(r.id))) return interaction.editReply({ embeds: [error('You cannot moderate a staff member.')] });
+        if (moderatorMember.roles.highest.position <= targetMember.roles.highest.position) return interaction.editReply({ embeds: [error('You cannot kick a user with a role equal to or higher than your own.')] });
+        if (!targetMember.kickable) return interaction.editReply({ embeds: [error('I do not have permission to kick this user (their role is likely higher than mine).')] });
 
         const caseId = `CASE-${Date.now()}`;
         const moderatorTag = interaction.user.tag;
-        
         const cleanModeratorTag = moderatorTag.trim();
         const cleanReason = reason.trim();
         const currentTimestamp = Date.now();
@@ -59,7 +59,6 @@ module.exports = {
             dmSent = true;
         } catch (error) {
             dmSent = false;
-            console.warn(`[WARN] Could not send DM to ${targetUser.tag}.`);
         }
 
         try {
@@ -71,6 +70,7 @@ module.exports = {
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             `, [caseId, guildId, 'KICK', targetUser.id, targetUser.tag, interaction.user.id, cleanModeratorTag, cleanReason, currentTimestamp, 0, 'EXECUTED', dmSent ? 'SENT' : 'FAILED']);
 
+            // LOGGING
             const modLogResult = await db.query('SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = $2', [guildId, 'modlog']);
             const modLogChannelId = modLogResult.rows[0]?.channel_id;
             
@@ -90,29 +90,25 @@ module.exports = {
                     .setTimestamp();
                     
                     const sentMessage = await channel.send({ embeds: [modLogEmbed] }).catch(console.error);
-                    if (sentMessage) {
-                        await db.query('UPDATE modlogs SET logmessageid = $1 WHERE caseid = $2', [sentMessage.id, caseId]);
-                    }
+                    if (sentMessage) await db.query('UPDATE modlogs SET logmessageid = $1 WHERE caseid = $2', [sentMessage.id, caseId]);
                 }
             }
             
-            const publicEmbed = new EmbedBuilder()
-            .setColor(SUCCESS_COLOR)
-            .setTitle(`${emojis.success} Kick Successfully Executed`)
-            .setDescription(`**${targetUser.tag}** has been **kicked** from the server.`)
-            .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 64 }))
-            .addFields(
-                { name: `${emojis.moderator} Moderator`, value: `<@${interaction.user.id}>`, inline: true },
-                { name: `${emojis.case_id} Case ID`, value: `\`${caseId}\``, inline: true },
-                { name: `${emojis.reason} Reason`, value: cleanReason, inline: false }
-            )
-            .setTimestamp();
+            // RESPUESTA PÚBLICA USANDO FÁBRICA
+            const publicEmbed = success(`**${targetUser.tag}** has been **kicked** from the server.`)
+                .setTitle(`${emojis.success} Kick Executed`)
+                .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 64 }))
+                .addFields(
+                    { name: `${emojis.moderator} Moderator`, value: `<@${interaction.user.id}>`, inline: true },
+                    { name: `${emojis.case_id} Case ID`, value: `\`${caseId}\``, inline: true },
+                    { name: `${emojis.reason} Reason`, value: cleanReason, inline: false }
+                );
 
-        await interaction.editReply({ embeds: [publicEmbed] });
+            await interaction.editReply({ embeds: [publicEmbed] });
 
-        } catch (error) {
-            console.error('[ERROR] Failed to execute kick:', error);
-            return interaction.editReply({ content: `${emojis.error} An error occurred during the kick execution. Please check my permissions and role hierarchy.`, flags: [MessageFlags.Ephemeral] });
+        } catch (err) {
+            console.error('[ERROR] Failed to execute kick:', err);
+            return interaction.editReply({ embeds: [error('An error occurred during the kick execution.')] });
         }
     },
 };
