@@ -1,5 +1,4 @@
 // handlers/componentHandler.js
-
 const universalPanel = require('../interactions/admin/universalPanel');
 const setupSystem = require('../interactions/admin/setup');
 const automodSystem = require('../interactions/admin/automod');
@@ -14,13 +13,19 @@ module.exports = async (interaction) => {
         return await universalPanel(interaction);
     }
 
-    // 2. Automod (LO PONEMOS ANTES QUE SETUP Y CAPTURAMOS SU BOTÓN ESPECÍFICO)
+    // 2. Automod
     if (customId.startsWith('automod_') || customId === 'setup_automod') {
         return await automodSystem(interaction);
     }
 
-    // 3. Setup (El resto de configuraciones)
-    if (customId.startsWith('setup_') || customId.startsWith('select_') || customId === 'delete_all_data' || customId === 'confirm_delete_data' || customId.startsWith('antinuke_') || customId.startsWith('perms_role_select_')) {
+    // 3. Setup y Configuración General (AQUÍ AÑADIMOS 'cancel_setup')
+    if (customId.startsWith('setup_') || 
+        customId.startsWith('select_') || 
+        customId === 'delete_all_data' || 
+        customId === 'confirm_delete_data' || 
+        customId === 'cancel_setup' ||  
+        customId.startsWith('antinuke_') || 
+        customId.startsWith('perms_role_select_')) {
         return await setupSystem(interaction);
     }
 

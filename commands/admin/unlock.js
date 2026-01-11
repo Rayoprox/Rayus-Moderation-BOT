@@ -1,65 +1,64 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, ChannelType, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, ChannelType } = require('discord.js');
 const { emojis } = require('../../utils/config.js');
 
-const UNLOCK_COLOR = 0x2ECC71; 
+const UNLOCK_COLOR = 0x2ECC71;
 
 module.exports = {
     deploy: 'main',
     data: new SlashCommandBuilder()
         .setName('unlock')
-        .setDescription('Unlocks a channel, allowing members to send messages.')
+        .setDescription('Unlocks the channel allowing members to speak.')
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels)
         .addChannelOption(option =>
             option.setName('channel')
-                .setDescription('The channel to unlock. Defaults to the current channel.')
+                .setDescription('The channel to unlock (Defaults to current).')
                 .addChannelTypes(ChannelType.GuildText)
                 .setRequired(false))
         .addStringOption(option =>
             option.setName('reason')
-                .setDescription('The reason for unlocking the channel.')
+                .setDescription('Reason for unlocking.')
                 .setRequired(false)),
 
     async execute(interaction) {
         const channel = interaction.options.getChannel('channel') || interaction.channel;
-        const reason = interaction.options.getString('reason') || 'No reason specified';
-        const everyoneRole = interaction.guild.roles.everyone;
+        const reason = interaction.options.getString('reason') || 'Channel restored.';
 
-        const cleanReason = reason.trim();
-
-        const perms = channel.permissionOverwrites.cache.get(everyoneRole.id);
-        if (!perms || !perms.deny.has(PermissionsBitField.Flags.SendMessages)) {
-            return interaction.editReply({ content: `${emojis.error} Channel ${channel} is **not currently locked**.`, flags: [MessageFlags.Ephemeral] });
-        }
+        await interaction.editReply({ 
+            content: `${emojis.loading} **Unlocking Channel...**` 
+        });
 
         try {
-            await channel.permissionOverwrites.edit(everyoneRole, {
-                SendMessages: null, 
-            }, `Channel unlocked by ${interaction.user.tag} for reason: ${cleanReason}`); 
+            const everyoneRole = interaction.guild.roles.everyone;
+
+            // APLICAR DESBLOQUEO: @everyone -> SendMessages: null (Restablecer a defecto)
+            await channel.permissionOverwrites.edit(everyoneRole, { 
+                SendMessages: null 
+            }, { reason: `Unlock by ${interaction.user.tag}` });
 
             const unlockEmbed = new EmbedBuilder()
                 .setColor(UNLOCK_COLOR)
-                .setTitle(`${emojis.unlock} Channel Unlocked`)
-                .setDescription(`This channel has been **UNLOCKED** and communications are restored.`)
+                .setTitle(`${emojis.unlock} CHANNEL UNLOCKED`)
+                .setDescription(`Lockdown lifted. Members may now send messages.`)
                 .addFields(
-                    { name: `${emojis.moderator} Moderator`, value: `${interaction.user.tag}`, inline: true },
-                    { name: `${emojis.reason} Reason`, value: cleanReason, inline: false }
+                    { name: `${emojis.moderator} Moderator`, value: `<@${interaction.user.id}>`, inline: true },
+                    { name: `${emojis.reason} Reason`, value: reason, inline: true }
                 )
                 .setTimestamp();
+
             await channel.send({ embeds: [unlockEmbed] });
 
             await interaction.editReply({ 
+                content: null,
                 embeds: [new EmbedBuilder()
                     .setColor(UNLOCK_COLOR)
-                    .setDescription(`${emojis.success} Channel ${channel} has been **UNLOCKED** successfully.`)
-                ],
-                flags: [MessageFlags.Ephemeral] 
+                    .setDescription(`${emojis.success} **Channel Unlocked Successfully.**`)
+                ]
             });
 
         } catch (error) {
-            console.error("Failed to unlock channel:", error);
+            console.error("Unlock Error:", error);
             await interaction.editReply({ 
-                content: `${emojis.error} An error occurred. Check my permissions to manage this channel.`,
-                flags: [MessageFlags.Ephemeral] 
+                content: `${emojis.error} **Error:** I couldn't unlock the channel.\n\`${error.message}\`` 
             });
         }
     },

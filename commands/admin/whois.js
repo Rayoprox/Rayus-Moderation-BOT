@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const db = require('../../utils/db.js');
 const { emojis } = require('../../utils/config.js');
 
@@ -7,7 +7,7 @@ module.exports = {
     isPublic: false, 
     data: new SlashCommandBuilder()
         .setName('whois')
-        .setDescription('Displays detailed administrative information about a user.')
+        .setDescription('Displays advanced information and permissions about a user.')
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
         .addUserOption(option =>
             option.setName('user')
@@ -20,98 +20,106 @@ module.exports = {
 
     async execute(interaction) {
         const targetUser = interaction.options.getUser('user');
-        const isPublic = interaction.options.getBoolean('public') || false;
         const guildId = interaction.guild.id;
 
-        const replyOptions = { embeds: [], flags: isPublic ? [] : [MessageFlags.Ephemeral] };
-        
-        const targetId = targetUser.id;
-        const targetTag = targetUser.tag;
-        
         const [targetMember, banEntry, logCountResult] = await Promise.all([
-            interaction.guild.members.fetch(targetId).catch(() => null),
-            interaction.guild.bans.fetch(targetId).catch(() => null),
-         
-            db.query('SELECT COUNT(*) FROM modlogs WHERE userid = $1 AND guildid = $2', [targetId, guildId])
+            interaction.guild.members.fetch(targetUser.id).catch(() => null),
+            interaction.guild.bans.fetch(targetUser.id).catch(() => null),
+            db.query('SELECT COUNT(*) FROM modlogs WHERE userid = $1 AND guildid = $2', [targetUser.id, guildId])
         ]);
 
         const totalModLogs = logCountResult.rows[0].count;
         
         let color = 0x3498DB; 
-        if (banEntry) color = 0xAA0000; 
+        if (targetUser.bot) color = 0x9B59B6;
+        else if (banEntry) color = 0xE74C3C;
         else if (targetMember) color = targetMember.displayColor || 0x3498DB;
 
         const whoisEmbed = new EmbedBuilder()
             .setColor(color)
-            .setTitle(`🔍 Whois: ${targetTag}`)
-            .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 128 }))
-            .addFields(
-                { 
-                    name: `${emojis.info} General Info`, 
-                    value: `**ID:** \`${targetId}\`\n**Account Created:** <t:${Math.floor(targetUser.createdTimestamp / 1000)}:R>`, 
-                    inline: false 
+            .setAuthor({ name: `${targetUser.tag} ${targetUser.bot ? '[BOT]' : ''}`, iconURL: targetUser.displayAvatarURL({ dynamic: true }) })
+            .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 256 }));
+
+        // 1. INFO USUARIO
+        whoisEmbed.addFields({
+            name: `${emojis.user || '👤'} User Identity`,
+            value: `**Mention:** <@${targetUser.id}>\n**ID:** \`${targetUser.id}\`\n**Created:** <t:${Math.floor(targetUser.createdTimestamp / 1000)}:F> (<t:${Math.floor(targetUser.createdTimestamp / 1000)}:R>)`,
+            inline: false
+        });
+
+        // 2. INFO SERVIDOR Y PERMISOS
+        if (targetMember) {
+            const joinedTimestamp = Math.floor(targetMember.joinedTimestamp / 1000);
+            
+            const roles = targetMember.roles.cache
+                .filter(r => r.id !== guildId)
+                .sort((a, b) => b.position - a.position)
+                .map(r => r.toString());
+            
+            const rolesDisplay = roles.length > 0 
+                ? (roles.length > 10 ? `${roles.slice(0, 10).join(', ')} ...and ${roles.length - 10} more` : roles.join(', ')) 
+                : 'No roles';
+
+            // Lista de permisos importantes a mostrar
+            const keyPermissions = [
+                'Administrator', 'ManageGuild', 'ManageRoles', 'ManageChannels', 
+                'BanMembers', 'KickMembers', 'ManageMessages', 'MentionEveryone', 
+                'ViewAuditLog', 'ManageWebhooks', 'ManageNicknames'
+            ];
+            
+            let permissionsDisplay = [];
+            if (targetMember.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                permissionsDisplay.push('🔥 **ADMINISTRATOR**');
+            } else {
+                const memberPerms = targetMember.permissions.toArray();
+                const matchedPerms = memberPerms.filter(p => keyPermissions.includes(p));
+                permissionsDisplay = matchedPerms.map(p => `\`${p}\``);
+                if (permissionsDisplay.length === 0) permissionsDisplay.push('Regular Member');
+            }
+
+            whoisEmbed.addFields(
+                {
+                    name: `${emojis.info || '📅'} Server Info`,
+                    value: `**Joined:** <t:${joinedTimestamp}:F> (<t:${joinedTimestamp}:R>)\n**Nickname:** ${targetMember.nickname || 'None'}`,
+                    inline: false
+                },
+                {
+                    name: `${emojis.role || '🛡️'} Roles [${roles.length}]`,
+                    value: rolesDisplay,
+                    inline: false
+                },
+                {
+                    name: `${emojis.lock || '🔑'} Key Permissions`,
+                    value: permissionsDisplay.join(', '),
+                    inline: false
                 }
             );
+        } else {
+            whoisEmbed.addFields({ name: '⚠️ Membership', value: 'User is NOT in this server.', inline: false });
+        }
 
-   
-        let modStatus = `\n**Mod Logs Total:** ${totalModLogs} cases`;
+        // 3. ESTADO MODERACIÓN
+        let modStatusValue = `**Total Logs:** ${totalModLogs}`;
+        
+        const activeWarningsResult = await db.query("SELECT COUNT(*) AS count FROM modlogs WHERE userid = $1 AND guildid = $2 AND action = 'WARN' AND status = 'ACTIVE'", [targetUser.id, guildId]);
+        modStatusValue += `\n**Active Warnings:** ${activeWarningsResult.rows[0].count}`;
 
         if (banEntry) {
-             const banReason = banEntry.reason || 'No reason specified';
-             modStatus += `\n**Ban Status:** ${emojis.ban} **Currently Banned**\n**Ban Reason:** \`${banReason.substring(0, 100)}...\``;
+            modStatusValue += `\n**Status:** 🔴 **BANNED**\n**Reason:** ${banEntry.reason || 'None'}`;
+        } else if (targetMember && targetMember.isCommunicationDisabled()) {
+            const timeoutEnd = Math.floor(targetMember.communicationDisabledUntilTimestamp / 1000);
+            modStatusValue += `\n**Status:** 🟡 **MUTED** until <t:${timeoutEnd}:R>`;
         } else {
-             modStatus += `\n**Ban Status:** ${emojis.success} Not Banned`;
+            modStatusValue += `\n**Status:** 🟢 Clean`;
         }
 
-        const activeWarningsResult = await db.query("SELECT COUNT(*) AS count FROM modlogs WHERE userid = $1 AND guildid = $2 AND action = 'WARN' AND status = 'ACTIVE'", [targetId, guildId]);
-        const activeWarningsCount = activeWarningsResult.rows[0].count;
-        
-        if (activeWarningsCount > 0) {
-            modStatus += `\n**Active Warnings:** ${emojis.warn} ${activeWarningsCount}`;
-        }
-        
-        whoisEmbed.addFields({ name: `${emojis.rules} Moderation & Safety`, value: modStatus, inline: false });
-
-
-        if (targetMember) {
-            const isTimeout = targetMember.isCommunicationDisabled();
-            const joinDate = `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:R>`;
-            
-            let timeoutInfo = '';
-            if (isTimeout) {
-                const endsAt = targetMember.communicationDisabledUntilTimestamp;
-                timeoutInfo = `${emojis.mute} **Timed Out** (Ends: <t:${Math.floor(endsAt / 1000)}:R>)`;
-            } else {
-                timeoutInfo = `${emojis.success} Not Timed Out`;
-            }
-
-            const rolesList = targetMember.roles.cache
-                .filter(r => r.id !== guildId) 
-                .sort((a, b) => b.position - a.position)
-                .map(r => r)
-                .slice(0, 10) 
-                .join(', ') || 'None';
-
-            whoisEmbed.addFields({ 
-                name: `${emojis.user} Server Membership`, 
-                value: `**Joined Server:** ${joinDate}\n**Highest Role:** ${targetMember.roles.highest}\n**Timeout Status:** ${timeoutInfo}`,
-                inline: true
-            });
-            
-            if (rolesList !== 'None') {
-                whoisEmbed.addFields({ 
-                    name: `${emojis.role} Roles (${targetMember.roles.cache.size - 1})`, 
-                    value: rolesList, 
-                    inline: false 
-                });
-            }
-        } else {
-            whoisEmbed.addFields({ name: `${emojis.error} Server Membership`, value: '❌ Not in server.', inline: true });
-        }
-
+        whoisEmbed.addFields({
+            name: `${emojis.rules || '⚖️'} Moderation`,
+            value: modStatusValue,
+            inline: false
+        });
 
         whoisEmbed.setFooter({ text: `Requested by ${interaction.user.tag}` }).setTimestamp();
-
-        await interaction.editReply({ ...replyOptions, embeds: [whoisEmbed] });
+        await interaction.editReply({ embeds: [whoisEmbed] });
     },
 };

@@ -7,7 +7,7 @@ const SUCCESS_COLOR = 0x2ECC71;
 
 module.exports = {
     deploy: 'main',
-    isPublic: true, 
+    isPublic: true, // Esto hace que interactionCreate use deferReply(ephemeral: false)
     data: new SlashCommandBuilder()
         .setName('purge')
         .setDescription('Deletes a specified number of messages from the channel (Max 100).')
@@ -20,14 +20,15 @@ module.exports = {
                 .setMaxValue(100)),
 
     async execute(interaction) {
+        // ELIMINADO: interaction.deferReply() -> Ya lo hace interactionCreate.js
+        
         const amount = interaction.options.getInteger('amount');
         const channel = interaction.channel;
         const moderatorTag = interaction.user.tag;
         
         if (!channel.permissionsFor(interaction.client.user).has(PermissionsBitField.Flags.ManageMessages)) {
             return interaction.editReply({ 
-                content: `${emojis.error} I do not have the **Manage Messages** permission in this channel.`, 
-                flags: [MessageFlags.Ephemeral] 
+                content: `${emojis.error} I do not have the **Manage Messages** permission in this channel.`
             });
         }
         
@@ -44,7 +45,7 @@ module.exports = {
             const errorEmbed = new EmbedBuilder()
                 .setColor(ERROR_COLOR)
                 .setTitle(`${emojis.error} Purge Operation Failed`)
-                .setDescription('An unexpected error occurred during message deletion.')
+                .setDescription('An unexpected error occurred during message deletion. Remember I cannot delete messages older than 14 days.')
                 .addFields(
                     { name: 'Attempted Amount', value: `${amount}`, inline: true },
                     { name: `${emojis.channel} Channel`, value: `<#${channel.id}>`, inline: true }
@@ -52,7 +53,7 @@ module.exports = {
                 .setFooter({ text: `Moderator: ${moderatorTag}` })
                 .setTimestamp();
 
-            return interaction.editReply({ embeds: [errorEmbed], flags: [MessageFlags.Ephemeral] });
+            return interaction.editReply({ embeds: [errorEmbed] });
         }
         
         const successEmbed = new EmbedBuilder()
@@ -69,23 +70,16 @@ module.exports = {
             content = `${emojis.warn} **Note:** ${amount - deletedCount} message(s) could not be deleted because they are older than 14 days.`;
         }
         
-       
         try {
-            
             await interaction.editReply({ 
                 content: content,
                 embeds: [successEmbed]
             });
             
-        
+            // Eliminar la confirmación después de 5 segundos
             setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); 
         } catch (error) {
-          
-            if (error.code === 10008) {
-                
-                 console.warn(`[WARN] Final purge reply expired or was deleted before successful edit/delete for interaction ${interaction.id}. (Code: 10008)`);
-            } else {
-               
+            if (error.code !== 10008) { // Ignorar error "Unknown Message" si ya se borró
                  console.warn('[WARN] Failed to edit or delete the final purge interaction reply:', error);
             }
         }
