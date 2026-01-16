@@ -9,15 +9,14 @@ function initializeTimerMap(client) {
 }
 
 const processExpiredPunishment = async (client, log) => {
-
     initializeTimerMap(client);
     const db = client.db;
     const guild = client.guilds.cache.get(log.guildid);
     if (!guild) return;
-    
+   
     const activeCheck = await db.query('SELECT status FROM modlogs WHERE caseid = $1', [log.caseid]);
     if (activeCheck.rows.length === 0 || activeCheck.rows[0].status !== 'ACTIVE') {
-         console.log(`[SCHEDULER] Log ${log.caseid} was already processed or is no longer active. Skipping.`);
+     
          return; 
     }
 
@@ -37,9 +36,11 @@ const processExpiredPunishment = async (client, log) => {
              }
         }
         
+  
         await db.query(`UPDATE modlogs SET status = 'EXPIRED', "endsat" = NULL WHERE caseid = $1`, [caseId]);
         console.log(`[SCHEDULER] Auto-expired ${action} for ${log.usertag} (Case ID: ${caseId}).`);
 
+    
         const logActionType = action === 'BAN' ? 'UNBAN' : 'UNMUTE';
         const autoCaseId = `AUTO-${logActionType}-${currentTimestamp}`;
 
@@ -50,19 +51,19 @@ const processExpiredPunishment = async (client, log) => {
         
         const modLogResult = await db.query("SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = 'modlog'", [guild.id]);
         const modLogChannelId = modLogResult.rows[0]?.channel_id;
- if (modLogChannelId) {
+        
+        if (modLogChannelId) {
             const channel = guild.channels.cache.get(modLogChannelId);
             if (channel) {
                  const user = await client.users.fetch(userId).catch(() => ({ tag: log.usertag, displayAvatarURL: () => 'https://cdn.discordapp.com/embed/avatars/0.png' }));
-                 const icon = logActionType === 'UNBAN' ? emojis.unban : emojis.unmute;
                  const modLogEmbed = new EmbedBuilder()
                     .setColor(0x2ECC71)
                     .setAuthor({ name: `Punishment Expired: ${logActionType}`, iconURL: user.displayAvatarURL({ dynamic: true }) })
                     .setDescription(`The temporary ${action.toLowerCase()} for **<@${userId}>** has expired.`)
                     .addFields(
-                        { name: `${emojis.user} User`, value: `<@${userId}> (\`${userId}\`)`, inline: true },
-                        { name: `${emojis.rules} Moderator`, value: `<@${client.user.id}>`, inline: true },
-                        { name: `${emojis.reason} Reason`, value: `Automatic lift: Original punishment (\`${caseId}\`) has expired.`, inline: false }
+                        { name: `${emojis.user || '👤'} User`, value: `<@${userId}> (\`${userId}\`)`, inline: true },
+                        { name: `${emojis.rules || '⚖️'} Moderator`, value: `<@${client.user.id}>`, inline: true },
+                        { name: `${emojis.reason || '📝'} Reason`, value: `Automatic lift: Original punishment (\`${caseId}\`) has expired.`, inline: false }
                     )
                     .setFooter({ text: `Auto Case ID: ${autoCaseId}` })
                     .setTimestamp();
@@ -70,32 +71,43 @@ const processExpiredPunishment = async (client, log) => {
             }
         }
     } catch (error) {
+
         await db.query(`UPDATE modlogs SET status = 'EXPIRED', "endsat" = NULL WHERE caseid = $1`, [caseId]);
         console.warn(`[SCHEDULER] Failed to auto-lift ${action} for ${log.usertag}. Error: ${error.message}`);
     }
 };
 
 const checkAndResumePunishments = async (client) => {
-  
     try {
         initializeTimerMap(client);
         const db = client.db;
         const now = Date.now();
-        
-        client.punishmentTimers.forEach(timer => clearTimeout(timer));
-        client.punishmentTimers.clear();
 
-        const activeResult = await db.query(`SELECT * FROM modlogs WHERE status = 'ACTIVE' AND "endsat" IS NOT NULL AND "endsat" > $1`, [now]);
+        const checkWindow = now + ms('16m'); 
+        
+        
+        const activeResult = await db.query(`
+            SELECT * FROM modlogs 
+            WHERE status = 'ACTIVE' 
+            AND "endsat" IS NOT NULL 
+            AND "endsat" > $1 
+            AND "endsat" <= $2
+        `, [now, checkWindow]);
 
         for (const log of activeResult.rows) {
+       
+            if (client.punishmentTimers.has(log.caseid)) continue;
+
             const endsAtTimestamp = Number(log.endsat);
             const remainingTime = endsAtTimestamp - now;
             
+      
             if (remainingTime <= 0) {
                 processExpiredPunishment(client, log);
                 continue;
             }
             
+        
             const timer = setTimeout(() => {
                 processExpiredPunishment(client, log);
                 client.punishmentTimers.delete(log.caseid);
@@ -104,32 +116,36 @@ const checkAndResumePunishments = async (client) => {
             client.punishmentTimers.set(log.caseid, timer);
         }
     } catch (error) {
-        console.error("[SCHEDULER-ERROR] Failed to check punishments due to a connection issue:", error.message);
+        console.error("[SCHEDULER-ERROR] Failed to check punishments:", error.message);
     }
-    
 };
 
 const resumePunishmentsOnStart = async (client) => {
     const db = client.db;
     const now = Date.now();
+    
+
     const expiredResult = await db.query(`SELECT * FROM modlogs WHERE status = 'ACTIVE' AND "endsat" IS NOT NULL AND "endsat" <= $1`, [now]);
     for (const log of expiredResult.rows) {
         await processExpiredPunishment(client, log);
     }
 
+
     await checkAndResumePunishments(client);
     
+   
     const logsResult = await db.query(`SELECT usertag, action, endsat, action_duration FROM modlogs WHERE status = 'ACTIVE' AND "endsat" IS NOT NULL ORDER BY "endsat" ASC`);
     
     if (logsResult.rows.length > 0) {
-        console.log('\n--- ACTIVE TEMPORARY PUNISHMENTS ---');
-        console.log(`Total Active Timers: ${logsResult.rows.length}`);
-        for (const log of logsResult.rows) {
+        console.log('\n--- ACTIVE TEMPORARY PUNISHMENTS (Database View) ---');
+        console.log(`Total Active Punishments: ${logsResult.rows.length}`);
+      
+        for (const log of logsResult.rows.slice(0, 5)) {
             const remaining = ms(Number(log.endsat) - Date.now(), { long: true });
-            console.log(`[TIMER] ${log.action} | User: ${log.usertag} | Duration: ${log.action_duration || 'N/A'}`);
-            console.log(`         > Time Left: ${remaining}`);
+            console.log(`[PENDING] ${log.action} | User: ${log.usertag} | Ends in: ${remaining}`);
         }
-        console.log('------------------------------------\n');
+        if (logsResult.rows.length > 5) console.log(`... and ${logsResult.rows.length - 5} more.`);
+        console.log('----------------------------------------------------\n');
     }
  
     return logsResult.rows.length;
@@ -140,7 +156,9 @@ const startScheduler = (client) => {
         return;
     }
     client.schedulerStarted = true;
-    setInterval(() => checkAndResumePunishments(client), ms('15m'));
+
+
+setInterval(() => checkAndResumePunishments(client), ms('15m'));
 };
 
 module.exports = { startScheduler, resumePunishmentsOnStart, initializeTimerMap };
