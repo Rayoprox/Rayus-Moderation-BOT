@@ -26,7 +26,7 @@ async function showPanelDashboard(interaction, db, guildId, panelId, isNew = fal
         .addFields(
             { name: '🎨 Appearance', value: `Title: ${p.title}\nButton: ${p.button_emoji} ${p.button_label} (${p.button_style})`, inline: true },
             { name: '👥 Roles', value: `Support: ${p.support_role_id ? `<@&${p.support_role_id}>` : '`None`'}\nBlacklist: ${p.blacklist_role_id ? `<@&${p.blacklist_role_id}>` : '`None`'}`, inline: true },
-            { name: '⚙️ General', value: `Category: ${p.ticket_category_id ? `<#${p.ticket_category_id}>` : '`None`'}\nLogs: ${p.log_channel_id ? `<#${p.log_channel_id}>` : '`None`'}`, inline: false }
+            { name: '⚙️ General', value: `Category: ${p.ticket_category_id ? `<#${p.ticket_category_id}>` : '`None`'}\nLogs: ${p.log_channel_id ? `<#${p.log_channel_id}>` : '`None`'}\n**Limit per User:** \`${p.ticket_limit || 1}\``, inline: false }
         )
         .setColor('#2B2D31');
 
@@ -209,16 +209,37 @@ module.exports = async (interaction) => {
     }
 
 
-    if (customId.startsWith('tkt_gen_') && !customId.includes('_cat_') && !customId.includes('_log_')) {
+    if (customId.startsWith('tkt_gen_') && !customId.includes('_cat_') && !customId.includes('_log_') && !customId.includes('_limit_')) {
         if (!await safeDefer(interaction, true)) return;
         const panelId = customId.replace('tkt_gen_', '');
 
         const catMenu = new ChannelSelectMenuBuilder().setCustomId(`tkt_gen_cat_${panelId}`).setPlaceholder('Select Ticket Category').setChannelTypes([ChannelType.GuildCategory]);
         const logMenu = new ChannelSelectMenuBuilder().setCustomId(`tkt_gen_log_${panelId}`).setPlaceholder('Select Log Channel').setChannelTypes([ChannelType.GuildText]);
+        const limitBtn = new ButtonBuilder().setCustomId(`tkt_gen_limit_${panelId}`).setLabel('Set Ticket Limit').setStyle(ButtonStyle.Primary).setEmoji('🔢');
         const dashboardBtn = new ButtonBuilder().setCustomId(`tkt_back_${panelId}`).setLabel('Back').setStyle(ButtonStyle.Secondary);
 
-        await interaction.editReply({ embeds: [new EmbedBuilder().setTitle('⚙️ General Settings').setDescription('Set where the tickets will be created and where logs will be sent.').setColor('#95A5A6')], components: [new ActionRowBuilder().addComponents(catMenu), new ActionRowBuilder().addComponents(logMenu), new ActionRowBuilder().addComponents(dashboardBtn)] });
+        await interaction.editReply({ embeds: [new EmbedBuilder().setTitle('⚙️ General Settings').setDescription('Set where tickets are created, where logs go, and max tickets per user.').setColor('#95A5A6')], components: [new ActionRowBuilder().addComponents(catMenu), new ActionRowBuilder().addComponents(logMenu), new ActionRowBuilder().addComponents(limitBtn, dashboardBtn)] });
         return;
+    }
+
+    if (customId.startsWith('tkt_gen_limit_')) {
+        const panelId = customId.replace('tkt_gen_limit_', '');
+        const modal = new ModalBuilder().setCustomId(`tkt_gen_save_limit_${panelId}`).setTitle('Ticket Limit Per User');
+        const input = new TextInputBuilder().setCustomId('limit_val').setLabel("Max Open Tickets (1-10)").setStyle(TextInputStyle.Short).setPlaceholder('1').setRequired(true).setMaxLength(2);
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        await interaction.showModal(modal);
+        return;
+    }
+
+    if (customId.startsWith('tkt_gen_save_limit_')) {
+        if (!await safeDefer(interaction, true)) return;
+        const panelId = customId.replace('tkt_gen_save_limit_', '');
+        let limit = parseInt(fields.getTextInputValue('limit_val'));
+        if (isNaN(limit) || limit < 1) limit = 1;
+        if (limit > 50) limit = 50;
+
+        await db.query('UPDATE ticket_panels SET ticket_limit = $1 WHERE guild_id = $2 AND panel_id = $3', [limit, guildId, panelId]);
+        return showPanelDashboard(interaction, db, guildId, panelId);
     }
 
     if (interaction.isChannelSelectMenu() && customId.startsWith('tkt_gen_')) {

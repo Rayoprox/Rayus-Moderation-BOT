@@ -1,14 +1,25 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const discordTranscripts = require('discord-html-transcripts');
 const { error, success } = require('../../utils/embedFactory.js');
+
+async function safeDefer(interaction) {
+    try {
+        if (!interaction.deferred && !interaction.replied) {
+            if (interaction.isChatInputCommand()) await interaction.deferReply({ ephemeral: false });
+            else await interaction.deferUpdate();
+        }
+        return true;
+    } catch (err) {
+        if (err.code === 10062) return false; 
+        console.error("SafeDefer Error:", err);
+        return false;
+    }
+}
 
 async function closeTicket(interaction, client, db, reason = 'No reason provided') {
     const { channel, guild, user } = interaction;
 
-    if (!interaction.deferred && !interaction.replied) {
-        if (interaction.isChatInputCommand()) await interaction.deferReply({ ephemeral: false });
-        else await interaction.deferUpdate();
-    }
+    if (!await safeDefer(interaction)) return;
 
     const ticketRes = await db.query('SELECT * FROM tickets WHERE channel_id = $1', [channel.id]);
     if (ticketRes.rows.length === 0) return channel.delete().catch(() => {});
@@ -33,10 +44,30 @@ async function closeTicket(interaction, client, db, reason = 'No reason provided
     let attachment = null;
     try {
         attachment = await discordTranscripts.createTranscript(channel, {
-            limit: -1, returnType: 'attachment', filename: `ticket-${ticket.panel_id}-${ticket.user_id}.html`, saveImages: true, poweredBy: false
+            limit: -1, 
+            returnType: 'attachment', 
+            filename: `ticket-${ticket.panel_id}-${ticket.user_id}.html`, 
+            saveImages: true, 
+            poweredBy: false
         });
     } catch (err) {
-        await channel.send({ embeds: [error("Failed to generate transcript.")] });
+        console.error("Transcript Gen Error:", err);
+        await channel.send({ embeds: [error("Failed to generate transcript file.")] });
+    }
+
+    try {
+        const ticketOwner = await guild.members.fetch(ticket.user_id).catch(() => null);
+        if (ticketOwner && attachment) {
+            const dmEmbed = new EmbedBuilder()
+                .setTitle("📄 Ticket Transcript")
+                .setDescription(`Your ticket in **${guild.name}** has been closed.\n\n**Reason:** ${reason}`)
+                .setColor('#5865F2')
+                .setTimestamp();
+            
+            await ticketOwner.send({ embeds: [dmEmbed], files: [attachment] });
+        }
+    } catch (e) {
+        console.error(`Failed to send DM to user ${ticket.user_id}:`, e.message);
     }
 
     try {
@@ -67,14 +98,13 @@ async function closeTicket(interaction, client, db, reason = 'No reason provided
         }
     } catch (err) {}
 
-    await channel.delete().catch(() => {});
+    setTimeout(() => {
+        channel.delete().catch(() => {});
+    }, 5000);
 }
 
 async function claimTicket(interaction, client, db) {
-    if (!interaction.deferred && !interaction.replied) {
-        if (interaction.isChatInputCommand()) await interaction.deferReply({ ephemeral: false });
-        else await interaction.deferUpdate();
-    }
+    if (!await safeDefer(interaction)) return;
     
     const { channel, user, guild } = interaction;
     
@@ -106,10 +136,12 @@ async function claimTicket(interaction, client, db) {
                 const newRow = ActionRowBuilder.from(row);
                 newRow.setComponents(row.components.map(component => {
                     const newButton = ButtonBuilder.from(component);
-                    if (newButton.data.custom_id === interaction.customId) {
-                        newButton.setDisabled(true);
+                    if (newButton.data.custom_id === 'ticket_action_claim') {
+                        newButton.setCustomId('ticket_action_unclaim'); 
                         newButton.setLabel(`Claimed by ${user.username}`);
+                        newButton.setEmoji('⛔');
                         newButton.setStyle(ButtonStyle.Secondary);
+                        newButton.setDisabled(false); 
                     }
                     return newButton;
                 }));
@@ -125,15 +157,82 @@ async function claimTicket(interaction, client, db) {
     else await channel.send(msg);
 }
 
+async function unclaimTicket(interaction, client, db) {
+    if (!await safeDefer(interaction)) return;
+
+    const { channel, user, guild } = interaction;
+
+    const check = await db.query('SELECT * FROM tickets WHERE channel_id = $1', [channel.id]);
+    if (check.rows.length === 0) return;
+    const ticket = check.rows[0];
+
+    let supportRoleId = null;
+    if (ticket.panel_id) {
+        const panelRes = await db.query('SELECT support_role_id FROM ticket_panels WHERE panel_id = $1', [ticket.panel_id]);
+        supportRoleId = panelRes.rows[0]?.support_role_id;
+    }
+
+    await channel.permissionOverwrites.delete(user);
+
+    if (supportRoleId) {
+        const supportRole = guild.roles.cache.get(supportRoleId);
+        if (supportRole) {
+            await channel.permissionOverwrites.edit(supportRole, { 
+                ViewChannel: true, 
+                SendMessages: true,
+                ManageMessages: true
+            });
+        }
+    }
+
+    try {
+        const currentComponents = interaction.message.components;
+        const newComponents = currentComponents.map(row => {
+            const newRow = ActionRowBuilder.from(row);
+            newRow.setComponents(row.components.map(component => {
+                const newButton = ButtonBuilder.from(component);
+                if (newButton.data.custom_id === 'ticket_action_unclaim') {
+                    newButton.setCustomId('ticket_action_claim');
+                    newButton.setLabel('Claim Ticket');
+                    newButton.setEmoji('🙋‍♂️');
+                    newButton.setStyle(ButtonStyle.Secondary);
+                    newButton.setDisabled(false);
+                }
+                return newButton;
+            }));
+            return newRow;
+        });
+        await interaction.message.edit({ components: newComponents });
+    } catch (err) {}
+
+    await channel.send({ embeds: [success(`Ticket **unclaimed**. Support team can speak again.`)] });
+}
+
 async function handleTicketActions(interaction, client) {
     const { customId } = interaction;
     const db = client.db;
 
-    if (customId.startsWith('ticket_close_') || customId === 'ticket_action_close') {
-        await closeTicket(interaction, client, db, 'Closed by Button');
+    if (customId === 'ticket_action_close') {
+        const modal = new ModalBuilder().setCustomId('ticket_close_reason_modal').setTitle('Close Ticket');
+        const reasonInput = new TextInputBuilder().setCustomId('close_reason').setLabel("Reason for closing").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(200);
+        modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+        
+        try {
+            await interaction.showModal(modal);
+        } catch (e) {
+            if (e.code === 10062) return; 
+            console.error(e);
+        }
+    }
+    else if (customId === 'ticket_close_reason_modal') {
+        const reason = interaction.fields.getTextInputValue('close_reason');
+        await closeTicket(interaction, client, db, reason);
     }
     else if (customId.startsWith('ticket_claim_') || customId === 'ticket_action_claim') {
         await claimTicket(interaction, client, db);
+    }
+    else if (customId === 'ticket_action_unclaim') {
+        await unclaimTicket(interaction, client, db);
     }
 }
 

@@ -4,14 +4,20 @@ const {
     ButtonBuilder, 
     ButtonStyle, 
     ChannelType, 
-    PermissionsBitField 
+    PermissionsBitField,
+    MessageFlags 
 } = require('discord.js');
 const { error, success } = require('../../utils/embedFactory.js');
 
 async function handleTicketOpen(interaction, client) {
-    
-    if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
+    try {
+        if (!interaction.deferred && !interaction.replied) {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        }
+    } catch (err) {
+        if (err.code === 10062) return; 
+        console.error("Error deferring ticket open:", err);
+        return;
     }
 
     const { customId, user, guild } = interaction;
@@ -19,26 +25,43 @@ async function handleTicketOpen(interaction, client) {
     
     const panelId = customId.replace('ticket_open_', '');
 
-
     const res = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guild.id, panelId]);
     if (res.rows.length === 0) {
-        return interaction.editReply({ embeds: [error('Configuration Error: This ticket panel no longer exists in the database.')] });
+        return interaction.editReply({ embeds: [error('Configuration Error: This ticket panel no longer exists in the database.')] }).catch(() => {});
     }
     const panel = res.rows[0];
 
-
     if (panel.blacklist_role_id && interaction.member.roles.cache.has(panel.blacklist_role_id)) {
-        return interaction.editReply({ embeds: [error('⛔ You are blacklisted from creating tickets.')] });
+        return interaction.editReply({ embeds: [error('⛔ You are blacklisted from creating tickets.')] }).catch(() => {});
     }
 
+    const openTickets = await db.query("SELECT * FROM tickets WHERE user_id = $1 AND panel_id = $2 AND status = 'OPEN'", [user.id, panelId]);
+    
+    let realOpenCount = 0;
+    
+    for (const ticket of openTickets.rows) {
+        const channelExists = guild.channels.cache.get(ticket.channel_id);
+        
+        if (!channelExists) {
+            await db.query("UPDATE tickets SET status = 'CLOSED', close_reason = 'Channel manually deleted' WHERE channel_id = $1", [ticket.channel_id]);
+        } else {
+            realOpenCount++;
+        }
+    }
+
+    const limit = panel.ticket_limit || 1;
+    
+    if (realOpenCount >= limit) {
+        return interaction.editReply({ embeds: [error(`⚠️ You have reached the limit of **${limit}** open ticket(s) for this panel.`)] }).catch(() => {});
+    }
 
     if (guild.channels.cache.size >= 495) {
-        return interaction.editReply({ embeds: [error('⚠️ Server Error: Maximum channel limit reached.')] });
+        return interaction.editReply({ embeds: [error('⚠️ Server Error: Maximum channel limit reached.')] }).catch(() => {});
     }
 
     let category = guild.channels.cache.get(panel.ticket_category_id);
     if (category && category.children.cache.size >= 50) {
-        return interaction.editReply({ embeds: [error('⚠️ System Error: The Ticket Category is full.')] });
+        return interaction.editReply({ embeds: [error('⚠️ System Error: The Ticket Category is full.')] }).catch(() => {});
     }
 
     try {
@@ -82,22 +105,22 @@ async function handleTicketOpen(interaction, client) {
             components: [new ActionRowBuilder().addComponents(closeBtn, claimBtn)] 
         });
 
-   
         const now = Date.now();
         await db.query(`
             INSERT INTO tickets (guild_id, channel_id, user_id, panel_id, status, created_at)
             VALUES ($1, $2, $3, $4, 'OPEN', $5)
         `, [guild.id, ticketChannel.id, user.id, panelId, now]);
-
         
         await interaction.editReply({ 
             embeds: [success(`Ticket created successfully! Go to ${ticketChannel}`)], 
             components: [] 
-        });
+        }).catch(() => {});
 
     } catch (err) {
         console.error("Ticket Creation Error:", err);
-        await interaction.editReply({ embeds: [error(`Failed to create ticket channel.\nError: ${err.message}`)] });
+        if (!interaction.replied) {
+            await interaction.editReply({ embeds: [error(`Failed to create ticket channel.\nError: ${err.message}`)] }).catch(() => {});
+        }
     }
 }
 
