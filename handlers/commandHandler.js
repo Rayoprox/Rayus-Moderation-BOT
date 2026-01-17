@@ -1,137 +1,137 @@
-const { PermissionsBitField, EmbedBuilder } = require('discord.js');
-const db = require('../utils/db.js');
-const { SUPREME_IDS, STAFF_COMMANDS, emojis } = require('../utils/config.js');
-const { safeDefer } = require('../utils/interactionHelpers.js');
-const { error } = require('../utils/embedFactory.js');
+    const { PermissionsBitField, EmbedBuilder } = require('discord.js');
+    const db = require('../utils/db.js');
+    const { SUPREME_IDS, STAFF_COMMANDS, emojis } = require('../utils/config.js');
+    const { safeDefer } = require('../utils/interactionHelpers.js');
+    const { error } = require('../utils/embedFactory.js');
 
 
 
-async function executeCommand(interaction, client) { 
-  
-    const botClient = client || interaction.client;
-    const command = botClient.commands.get(interaction.commandName);
-
-    if (!command) return;
-
-    const { guild, user, member } = interaction;
-
-
-    const isPublic = command.isPublic ?? false;
+    async function executeCommand(interaction, client) { 
     
-    if (!await safeDefer(interaction, false, !isPublic)) return;
+        const botClient = client || interaction.client;
+        const command = botClient.commands.get(interaction.commandName);
 
-    if (SUPREME_IDS.includes(user.id)) {
-        try { 
-            await command.execute(interaction); 
-            await sendCommandLog(interaction, db, true); 
-        } catch (e) { console.error(e); }
-        return;
-    }
+        if (!command) return;
 
-    try {
-      
-        const [settingsRes, permsRes] = await Promise.all([
-            db.query('SELECT universal_lock, staff_roles FROM guild_settings WHERE guildid = $1', [guild.id]),
-            db.query('SELECT role_id FROM command_permissions WHERE guildid = $1 AND command_name = $2', [guild.id, command.data.name])
-        ]);
+        const { guild, user, member } = interaction;
 
-        const settings = settingsRes.rows[0] || {};
-        const universalLock = settings.universal_lock === true;
+
+        const isPublic = command.isPublic ?? false;
         
-  
-        const staffRoles = settings.staff_roles ? settings.staff_roles.split(',').filter(r => r) : [];
-        
-     
-        const specificAllowedRoles = permsRes.rows.map(r => r.role_id);
-        
-        const memberRoles = member.roles.cache;
-        const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
+        if (!await safeDefer(interaction, false, !isPublic)) return;
 
-       
-        const isGlobalStaff = memberRoles.some(r => staffRoles.includes(r.id));
+        if (SUPREME_IDS.includes(user.id)) {
+            try { 
+                await command.execute(interaction); 
+                await sendCommandLog(interaction, db, true); 
+            } catch (e) { console.error(e); }
+            return;
+        }
+
+        try {
         
-       
-        const hasSpecificPermission = specificAllowedRoles.length > 0 && memberRoles.some(r => specificAllowedRoles.includes(r.id));
+            const [settingsRes, permsRes] = await Promise.all([
+                db.query('SELECT universal_lock, staff_roles FROM guild_settings WHERE guildid = $1', [guild.id]),
+                db.query('SELECT role_id FROM command_permissions WHERE guildid = $1 AND command_name = $2', [guild.id, command.data.name])
+            ]);
 
-        let isAllowed = false;
-        let errorMessage = '⛔ You do not have permission to use this command.';
-
+            const settings = settingsRes.rows[0] || {};
+            const universalLock = settings.universal_lock === true;
+            
     
-        if (universalLock) {
-           
-            if (isAdmin || isGlobalStaff || hasSpecificPermission) {
-                isAllowed = true;
+            const staffRoles = settings.staff_roles ? settings.staff_roles.split(',').filter(r => r) : [];
+            
+        
+            const specificAllowedRoles = permsRes.rows.map(r => r.role_id);
+            
+            const memberRoles = member.roles.cache;
+            const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
+
+        
+            const isGlobalStaff = memberRoles.some(r => staffRoles.includes(r.id));
+            
+        
+            const hasSpecificPermission = specificAllowedRoles.length > 0 && memberRoles.some(r => specificAllowedRoles.includes(r.id));
+
+            let isAllowed = false;
+            let errorMessage = '⛔ You do not have permission to use this command.';
+
+        
+            if (universalLock) {
+            
+                if (isAdmin || isGlobalStaff || hasSpecificPermission) {
+                    isAllowed = true;
+                } else {
+                    isAllowed = false;
+                
+                    errorMessage = `🔒 **Security Lockdown Active**\nOnly Staff & Whitelisted roles can use commands.`;
+                }
             } else {
-                isAllowed = false;
-               
-                errorMessage = `🔒 **Security Lockdown Active**\nOnly Staff & Whitelisted roles can use commands.`;
+            
+                if (isAdmin) {
+                    isAllowed = true; 
+                } 
+                else if (hasSpecificPermission) {
+                    isAllowed = true; 
+                }
+                else if (isPublic) {
+                    isAllowed = true; 
+                }
+                else if (isGlobalStaff && STAFF_COMMANDS.includes(command.data.name)) {
+                
+                    isAllowed = true;
+                }
+            
             }
-        } else {
-          
-            if (isAdmin) {
-                isAllowed = true; 
-            } 
-            else if (hasSpecificPermission) {
-                isAllowed = true; 
+
+            if (!isAllowed) {
+                return interaction.editReply({ 
+                    embeds: [error(errorMessage)], 
+                    content: null 
+                });
             }
-            else if (isPublic) {
-                isAllowed = true; 
-            }
-            else if (isGlobalStaff && STAFF_COMMANDS.includes(command.data.name)) {
-               
-                isAllowed = true;
-            }
-           
-        }
-
-        if (!isAllowed) {
-            return interaction.editReply({ 
-                embeds: [error(errorMessage)], 
-                content: null 
-            });
-        }
-    
-        await command.execute(interaction);
-
-      
-        await sendCommandLog(interaction, db, isAdmin);
-
-    } catch (err) {
-        console.error(`Error executing ${interaction.commandName}:`, err);
-        const msg = { embeds: [error('An unexpected error occurred while executing this command!')], content: null };
-        if (interaction.replied || interaction.deferred) await interaction.editReply(msg).catch(() => {});
-    }
-}
-
-
-async function sendCommandLog(interaction, db, isAdmin) {
-    try {
-        const cmdLogResult = await db.query('SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = $2', [interaction.guild.id, 'cmdlog']);
         
-        if (cmdLogResult.rows[0]?.channel_id) {
-            const channel = interaction.guild.channels.cache.get(cmdLogResult.rows[0].channel_id);
-            if (channel) {
-                const fullCommandString = interaction.toString(); 
+            await command.execute(interaction);
 
-                const logEmbed = new EmbedBuilder()
-                    .setColor(isAdmin ? 0x2B2D31 : 0x3498DB) 
-                    .setAuthor({ 
-                        name: 'Command Executed', 
-                        iconURL: interaction.user.displayAvatarURL() 
-                    })
-                    .setDescription(`**Command:** \`${fullCommandString}\``)
-                    .addFields(
-                        { name: `${emojis?.user || '👤'} User`, value: `${interaction.user} (\`${interaction.user.id}\`)`, inline: true },
-                        { name: `${emojis?.channel || '📺'} Channel`, value: `${interaction.channel} (\`${interaction.channel.id}\`)`, inline: true }
-                    )
-                    .setTimestamp();
+        
+            await sendCommandLog(interaction, db, isAdmin);
 
-                channel.send({ embeds: [logEmbed] }).catch(() => {}); 
-            }
+        } catch (err) {
+            console.error(`Error executing ${interaction.commandName}:`, err);
+            const msg = { embeds: [error('An unexpected error occurred while executing this command!')], content: null };
+            if (interaction.replied || interaction.deferred) await interaction.editReply(msg).catch(() => {});
         }
-    } catch (e) {
-        console.warn('Failed to send command log:', e.message);
     }
-}
 
-module.exports = executeCommand;
+
+    async function sendCommandLog(interaction, db, isAdmin) {
+        try {
+            const cmdLogResult = await db.query('SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = $2', [interaction.guild.id, 'cmdlog']);
+            
+            if (cmdLogResult.rows[0]?.channel_id) {
+                const channel = interaction.guild.channels.cache.get(cmdLogResult.rows[0].channel_id);
+                if (channel) {
+                    const fullCommandString = interaction.toString(); 
+
+                    const logEmbed = new EmbedBuilder()
+                        .setColor(isAdmin ? 0x2B2D31 : 0x3498DB) 
+                        .setAuthor({ 
+                            name: 'Command Executed', 
+                            iconURL: interaction.user.displayAvatarURL() 
+                        })
+                        .setDescription(`**Command:** \`${fullCommandString}\``)
+                        .addFields(
+                            { name: `${emojis?.user || '👤'} User`, value: `${interaction.user} (\`${interaction.user.id}\`)`, inline: true },
+                            { name: `${emojis?.channel || '📺'} Channel`, value: `${interaction.channel} (\`${interaction.channel.id}\`)`, inline: true }
+                        )
+                        .setTimestamp();
+
+                    channel.send({ embeds: [logEmbed] }).catch(() => {}); 
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to send command log:', e.message);
+        }
+    }
+
+    module.exports = executeCommand;

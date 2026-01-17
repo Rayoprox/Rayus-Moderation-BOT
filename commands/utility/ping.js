@@ -1,30 +1,90 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { emojis } = require('../../utils/config.js');
 
 module.exports = {
     deploy: 'all',
-    isPublic: true, // Respuesta pública
+    isPublic: true,
     data: new SlashCommandBuilder()
         .setName('ping')
-        .setDescription("Checks the bot's response time."),
+        .setDescription("Checks the bot's system latency and status."),
 
-    async execute(interaction) {
-    
+    async execute(interaction) { 
         
-        const apiLatency = interaction.client.ws.ping;
+        const client = interaction.client; 
+
+        const dbStart = Date.now();
+        try {
+            if (client.db) await client.db.query('SELECT 1'); 
+        } catch (e) { }
+        const dbLatency = Date.now() - dbStart;
+
+        const apiLatency = client.ws.ping;
         const appLatency = Date.now() - interaction.createdTimestamp;
 
+       
+        let statusColor = 0x2ECC71; // Green
+        let statusEmoji = emojis?.check || '🟢';
+        let statusText = 'Excellent';
+
+        if (apiLatency > 200 || dbLatency > 200) {
+            statusColor = 0xF1C40F;
+            statusEmoji = '🟡';
+            statusText = 'Fair';
+        }
+        if (apiLatency > 500 || dbLatency > 500) {
+            statusColor = 0xE74C3C; 
+            statusEmoji = '🔴';
+            statusText = 'High Load';
+        }
+
+     
+        const days = Math.floor(client.uptime / 86400000);
+        const hours = Math.floor(client.uptime / 3600000) % 24;
+        const minutes = Math.floor(client.uptime / 60000) % 60;
+        const uptimeStr = `${days}d ${hours}h ${minutes}m`;
+
         const embed = new EmbedBuilder()
-            .setColor(0x0099FF)
-            .setTitle('📡 Connection Status & Latency Version 1.2')
-            .setDescription(`Measurement of bot responsiveness across network components.`)
+            .setColor(statusColor)
+            .setTitle(`${statusEmoji} System Status: ${statusText}`)
+            .setDescription(`**Universal Piece** is currently operational.`)
             .addFields(
-                { name: 'App Latency (Edit Time)', value: `⏱️ **${appLatency}ms**`, inline: true },
-                { name: 'API Latency (Heartbeat)', value: `💓 **${apiLatency}ms**`, inline: true },
-                { name: '\u200B', value: '\u200B', inline: true },
+                { 
+                    name: '📡 API Latency', 
+                    value: `\`\`\`yml\n${apiLatency}ms\`\`\``, 
+                    inline: true 
+                },
+                { 
+                    name: '⚡ App Latency', 
+                    value: `\`\`\`yml\n${appLatency}ms\`\`\``, 
+                    inline: true 
+                },
+                { 
+                    name: '🗄️ Database', 
+                    value: `\`\`\`yml\n${dbLatency}ms\`\`\``, 
+                    inline: true 
+                },
+                {
+                    name: '⏱️ Uptime',
+                    value: `\`${uptimeStr}\``,
+                    inline: true
+                },
+                {
+                    name: '💾 Memory Usage',
+                    value: `\`${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB\``,
+                    inline: true
+                }
             )
-            .setFooter({ text: `Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+            .setFooter({ 
+                text: `Requested by ${interaction.user.username}`, 
+                iconURL: interaction.user.displayAvatarURL() 
+            })
             .setTimestamp();
 
-        await interaction.editReply({ embeds: [embed] });
+      
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ embeds: [embed] });
+        } else {
+            await interaction.reply({ embeds: [embed] });
+        }
     },
 };
