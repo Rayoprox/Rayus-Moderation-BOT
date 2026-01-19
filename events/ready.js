@@ -32,13 +32,26 @@ module.exports = {
         }, 86400000);
 
         const updateStatus = () => {
-            const guild = client.guilds.cache.first();
-            const statusText = guild ? `Moderating ${guild.name} | by @ukirama` : 'by @ukirama';
-
-            client.user.setPresence({
-                activities: [{ name: statusText, type: ActivityType.Watching }],
-                status: 'online',
-            });
+            const guildId = process.env.DISCORD_GUILD_ID;
+            const guild = client.guilds.cache.get(guildId);
+            
+            if (guild) {
+                client.user.setPresence({
+                    activities: [{ 
+                        name: `Moderating ${guild.name} | Made by: ukirama`, 
+                        type: ActivityType.Watching 
+                    }],
+                    status: 'online',
+                });
+            } else {
+                client.user.setPresence({
+                    activities: [{ 
+                        name: `Made by: @ukirama`, 
+                        type: ActivityType.Watching 
+                    }],
+                    status: 'online',
+                });
+            }
         };
 
         updateStatus();

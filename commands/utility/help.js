@@ -70,7 +70,7 @@ module.exports = {
             .setDescription(`Here is a comprehensive list of commands available to **${user.username}** in **${guild.name}**.`)
             .setThumbnail(client.user.displayAvatarURL({ dynamic: true, size: 256 }))
             .setFooter({ 
-                text: `Requested by ${user.username} • Dev by @ukirama`, 
+                text: `Requested by ${user.username} • Made by: ukirama`, 
                 iconURL: user.displayAvatarURL({ dynamic: true }) 
             })
             .setTimestamp();
