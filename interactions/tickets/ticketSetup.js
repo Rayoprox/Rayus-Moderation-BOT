@@ -6,19 +6,19 @@ const {
 const { safeDefer, smartReply } = require('../../utils/interactionHelpers.js');
 const { success, error } = require('../../utils/embedFactory.js');
 
-
+// --- DASHBOARD PRINCIPAL ---
 async function showPanelDashboard(interaction, db, guildId, panelId) {
     const res = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guildId, panelId]);
-    if (res.rows.length === 0) return await smartReply(interaction, { embeds: [error('Panel not found.')] });
+    if (res.rows.length === 0) return await smartReply(interaction, { embeds: [error('Panel not found in database.')] });
     const p = res.rows[0];
 
     const embed = new EmbedBuilder()
         .setTitle(`⚙️ Configuration: ${p.title}`)
         .setDescription(`Current settings for panel \`${p.panel_id}\`.\nUse the buttons below to modify the configuration.`)
         .addFields(
-            { name: '🎨 Appearance', value: `> **Title:** ${p.title}\n> **P. Color:** \`${p.panel_color || '#5865F2'}\`\n> **W. Color:** \`${p.welcome_color || '#5865F2'}\``, inline: true },
-            { name: '🔘 Button', value: `> **Style:** ${p.button_style || 'Primary'}\n> **Label:** ${p.button_emoji || '🎫'} ${p.button_label || 'Open'}`, inline: true },
-            { name: '⚙️ General', value: `> **Roles:** ${p.support_role_id ? `<@&${p.support_role_id}>` : '`None`'}\n> **Logs:** ${p.log_channel_id ? `<#${p.log_channel_id}>` : '`None`'}`, inline: false }
+            { name: '🎨 Appearance', value: `> **Title:** ${p.title}\n> **Color:** \`${p.panel_color || '#5865F2'}\`\n> **Button:** ${p.button_emoji || '🎫'} ${p.button_label || 'Open'}`, inline: true },
+            { name: '👥 Roles', value: `> **Support:** ${p.support_role_id ? `<@&${p.support_role_id}>` : '`Not Set`'}\n> **Blacklist:** ${p.blacklist_role_id ? `<@&${p.blacklist_role_id}>` : '`Not Set`'}`, inline: true },
+            { name: '⚙️ General', value: `> **Category:** ${p.ticket_category_id ? `<#${p.ticket_category_id}>` : '`Not Set`'}\n> **Logs:** ${p.log_channel_id ? `<#${p.log_channel_id}>` : '`Not Set`'}\n> **Limit:** \`${p.ticket_limit || 1}\``, inline: false }
         )
         .setColor(p.panel_color || '#5865F2')
         .setFooter({ text: 'Made by: ukirama' });
@@ -34,21 +34,23 @@ async function showPanelDashboard(interaction, db, guildId, panelId) {
         new ButtonBuilder().setCustomId('setup_tickets_menu').setLabel('Back to Menu').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')
     );
 
-    await smartReply(interaction, { embeds: [embed], components: [row1, row2] });
+    // FIX: content: null limpia cualquier texto anterior
+    await smartReply(interaction, { content: null, embeds: [embed], components: [row1, row2] });
 }
 
-
+// --- SUB-MENÚ APARIENCIA ---
 async function showAppearanceMenu(interaction, db, guildId, panelId) {
     const res = await db.query('SELECT title, description, welcome_message, button_label, button_emoji, panel_color, welcome_color, button_style FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guildId, panelId]);
     const p = res.rows[0];
 
-   
+    // Preview Panel
     const panelPreview = new EmbedBuilder()
         .setTitle(p.title)
         .setDescription(p.description || '*(No description set)*')
         .setColor(p.panel_color || '#5865F2')
         .setFooter({ text: 'Preview: Main Panel Embed' });
 
+    // Preview Welcome
     const welcomePreview = new EmbedBuilder()
         .setDescription(`**Welcome Message Preview:**\n${p.welcome_message || 'Hello {user}...'}`)
         .setColor(p.welcome_color || '#5865F2')
@@ -57,7 +59,7 @@ async function showAppearanceMenu(interaction, db, guildId, panelId) {
     const rowEmbeds = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`tkt_edit_panel_embed_${panelId}`).setLabel('Edit Panel Embed').setStyle(ButtonStyle.Primary).setEmoji('🖼️'),
         new ButtonBuilder().setCustomId(`tkt_edit_welcome_msg_${panelId}`).setLabel('Edit Welcome Msg').setStyle(ButtonStyle.Primary).setEmoji('👋'),
-        new ButtonBuilder().setCustomId(`tkt_select_color_target_${panelId}`).setLabel('Change Colors').setStyle(ButtonStyle.Success).setEmoji('🎨') // <--- CAMBIADO
+        new ButtonBuilder().setCustomId(`tkt_select_color_target_${panelId}`).setLabel('Change Colors').setStyle(ButtonStyle.Success).setEmoji('🎨')
     );
 
     const rowButtons = new ActionRowBuilder().addComponents(
@@ -72,7 +74,7 @@ async function showAppearanceMenu(interaction, db, guildId, panelId) {
     });
 }
 
-
+// --- PASO 1: PREGUNTAR QUÉ COLOREAR ---
 async function showColorTargetSelector(interaction, panelId) {
     const embed = new EmbedBuilder()
         .setTitle('🎨 Color Configuration')
@@ -89,12 +91,11 @@ async function showColorTargetSelector(interaction, panelId) {
         new ButtonBuilder().setCustomId(`tkt_appearance_menu_${panelId}`).setLabel('Cancel').setStyle(ButtonStyle.Danger)
     );
 
-    await smartReply(interaction, { embeds: [embed], components: [row, rowBack] });
+    await smartReply(interaction, { content: null, embeds: [embed], components: [row, rowBack] });
 }
 
-
+// --- PASO 2A: SELECTOR HEX (Para Embeds) ---
 async function showHexPicker(interaction, panelId, targetSource) {
-    
     const targetName = targetSource === 'panel' ? 'Panel Embed' : 'Welcome Embed';
     
     const embed = new EmbedBuilder()
@@ -114,10 +115,10 @@ async function showHexPicker(interaction, panelId, targetSource) {
         new ButtonBuilder().setCustomId(`tkt_select_color_target_${panelId}`).setLabel('Back').setStyle(ButtonStyle.Secondary)
     );
 
-    await smartReply(interaction, { embeds: [embed], components: [rowStandard, rowCustom] });
+    await smartReply(interaction, { content: null, embeds: [embed], components: [rowStandard, rowCustom] });
 }
 
-
+// --- PASO 2B: SELECTOR ESTILO BOTÓN (Para Botones) ---
 async function showButtonStylePicker(interaction, panelId) {
     const embed = new EmbedBuilder()
         .setTitle('🔘 Select Button Style')
@@ -135,7 +136,7 @@ async function showButtonStylePicker(interaction, panelId) {
         new ButtonBuilder().setCustomId(`tkt_select_color_target_${panelId}`).setLabel('Back').setStyle(ButtonStyle.Secondary)
     );
 
-    await smartReply(interaction, { embeds: [embed], components: [row, rowBack] });
+    await smartReply(interaction, { content: null, embeds: [embed], components: [row, rowBack] });
 }
 
 
@@ -144,7 +145,7 @@ module.exports = async (interaction) => {
     const db = client.db;
     const guildId = guild.id;
 
-
+    // --- MAIN MENU ---
     if (customId === 'setup_tickets_menu') {
         if (!await safeDefer(interaction, true)) return;
         const panels = await db.query('SELECT panel_id, title FROM ticket_panels WHERE guild_id = $1 ORDER BY id ASC', [guildId]);
@@ -156,77 +157,67 @@ module.exports = async (interaction) => {
             new ButtonBuilder().setCustomId('tkt_delete_list').setLabel('Delete').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(panels.rows.length === 0),
             new ButtonBuilder().setCustomId('setup_home').setLabel('Back').setStyle(ButtonStyle.Secondary)
         );
-        return await smartReply(interaction, { embeds: [embed], components: [row] });
+        // content: null para limpiar posibles residuos
+        return await smartReply(interaction, { content: null, embeds: [embed], components: [row] });
     }
 
-
+    // --- LISTAS EDIT/DELETE ---
     if (customId === 'tkt_edit_list' || customId === 'tkt_delete_list') {
         if (!await safeDefer(interaction, true)) return;
         const isDelete = customId.includes('delete');
         const panels = await db.query('SELECT panel_id, title FROM ticket_panels WHERE guild_id = $1', [guildId]);
         const menu = new StringSelectMenuBuilder().setCustomId(isDelete ? 'tkt_confirm_delete' : 'tkt_select_dashboard').setPlaceholder('Select panel...').addOptions(panels.rows.map(p => ({ label: p.title, value: p.panel_id, emoji: isDelete ? '🗑️' : '✏️' })));
-        return await smartReply(interaction, { embeds: [new EmbedBuilder().setTitle(isDelete ? '🗑️ Delete' : '✏️ Edit').setDescription('Select a panel.').setColor(isDelete ? '#E74C3C' : '#3498DB')], components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_tickets_menu').setLabel('Cancel').setStyle(ButtonStyle.Secondary))] });
+        return await smartReply(interaction, { content: null, embeds: [new EmbedBuilder().setTitle(isDelete ? '🗑️ Delete' : '✏️ Edit').setDescription('Select a panel.').setColor(isDelete ? '#E74C3C' : '#3498DB')], components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_tickets_menu').setLabel('Cancel').setStyle(ButtonStyle.Secondary))] });
     }
     if (customId === 'tkt_select_dashboard') { if (!await safeDefer(interaction, true)) return; return showPanelDashboard(interaction, db, guildId, values[0]); }
     if (customId === 'tkt_confirm_delete') { 
         if (!await safeDefer(interaction, true)) return; 
         await db.query('DELETE FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guildId, values[0]]); 
-        return await smartReply(interaction, { embeds: [success(`Panel \`${values[0]}\` deleted.`)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_tickets_menu').setLabel('Return').setStyle(ButtonStyle.Primary))] }); 
+        return await smartReply(interaction, { content: null, embeds: [success(`Panel \`${values[0]}\` deleted.`)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_tickets_menu').setLabel('Return').setStyle(ButtonStyle.Primary))] }); 
     }
 
-
+    // --- ENTRADA APARIENCIA ---
     if (customId.startsWith('tkt_appearance_menu_')) {
         if (!await safeDefer(interaction, true)) return;
         return await showAppearanceMenu(interaction, db, guildId, customId.replace('tkt_appearance_menu_', ''));
     }
 
-    
+    // --- GESTIÓN DE COLORES ---
     if (customId.startsWith('tkt_select_color_target_')) {
         if (!await safeDefer(interaction, true)) return;
         return await showColorTargetSelector(interaction, customId.replace('tkt_select_color_target_', ''));
     }
 
-  
     if (customId.startsWith('tkt_color_source_')) {
         if (!await safeDefer(interaction, true)) return;
-        const parts = customId.split('_'); 
-        const type = parts[3]; 
+        const parts = customId.split('_');
+        const type = parts[3];
         const pId = parts[4];
-
-        if (type === 'button') {
-            return await showButtonStylePicker(interaction, pId);
-        } else {
-            return await showHexPicker(interaction, pId, type);
-        }
+        if (type === 'button') return await showButtonStylePicker(interaction, pId);
+        else return await showHexPicker(interaction, pId, type);
     }
 
-   
     if (customId.startsWith('tkt_set_hex_') && !customId.includes('custom')) {
         if (!await safeDefer(interaction, true)) return;
-        const parts = customId.split('_'); 
+        const parts = customId.split('_');
         const colorName = parts[3];
-        const target = parts[4]; 
+        const target = parts[4];
         const pId = parts[5];
-        
         const colorMap = { 'Blue': '#3498DB', 'Red': '#E74C3C', 'Green': '#2ECC71', 'Grey': '#95A5A6' };
         const colName = target === 'panel' ? 'panel_color' : 'welcome_color';
-        
         await db.query(`UPDATE ticket_panels SET ${colName} = $1 WHERE guild_id = $2 AND panel_id = $3`, [colorMap[colorName], guildId, pId]);
         return await showAppearanceMenu(interaction, db, guildId, pId);
     }
 
-   
     if (customId.startsWith('tkt_set_btn_')) {
         if (!await safeDefer(interaction, true)) return;
-        const parts = customId.split('_'); 
+        const parts = customId.split('_');
         const style = parts[3];
         const pId = parts[4];
-        
         await db.query(`UPDATE ticket_panels SET button_style = $1 WHERE guild_id = $2 AND panel_id = $3`, [style, guildId, pId]);
         return await showAppearanceMenu(interaction, db, guildId, pId);
     }
 
-   
     if (customId.startsWith('tkt_set_hex_custom_')) {
         const parts = customId.split('_');
         const target = parts[4];
@@ -238,19 +229,18 @@ module.exports = async (interaction) => {
 
     if (customId.startsWith('tkt_save_hex_final_')) {
         if (!await safeDefer(interaction, true)) return;
-        const parts = customId.split('_'); 
+        const parts = customId.split('_');
         const target = parts[4];
         const pId = parts[5];
-        
         let hex = fields.getTextInputValue('hex');
         if (!hex.startsWith('#')) hex = '#' + hex;
         if (!/^#([0-9A-F]{3}){1,2}$/i.test(hex)) return await smartReply(interaction, { embeds: [error('Invalid HEX code.')] }, true);
-
         const colName = target === 'panel' ? 'panel_color' : 'welcome_color';
         await db.query(`UPDATE ticket_panels SET ${colName} = $1 WHERE guild_id = $2 AND panel_id = $3`, [hex, guildId, pId]);
         return await showAppearanceMenu(interaction, db, guildId, pId);
     }
 
+    // --- EDICIÓN TEXTOS ---
     if (customId.startsWith('tkt_edit_panel_embed_')) {
         const pId = customId.replace('tkt_edit_panel_embed_', '');
         const res = await db.query('SELECT title, description FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guildId, pId]);
@@ -299,6 +289,9 @@ module.exports = async (interaction) => {
         return showAppearanceMenu(interaction, db, guildId, pId);
     }
 
+    // --- ROLES, GENERAL, CREATE & POST (Asegurando content: null) ---
+    // (Estos bloques son idénticos a los anteriores, pero añadiendo content: null en los smartReply)
+    
     if (customId.startsWith('tkt_roles_menu_')) { 
         if (!await safeDefer(interaction, true)) return;
         const pId = customId.replace('tkt_roles_menu_', '');
@@ -308,7 +301,7 @@ module.exports = async (interaction) => {
         const r1 = new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId(`tkt_save_role_support_${pId}`).setPlaceholder('Select Support Role'));
         const r2 = new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId(`tkt_save_role_blacklist_${pId}`).setPlaceholder('Select Blacklist Role'));
         const r3 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`tkt_back_${pId}`).setLabel('Back').setStyle(ButtonStyle.Secondary));
-        return await smartReply(interaction, { embeds: [embed], components: [r1, r2, r3] });
+        return await smartReply(interaction, { content: null, embeds: [embed], components: [r1, r2, r3] });
     }
     
     if (interaction.isRoleSelectMenu() && customId.startsWith('tkt_save_role_')) {
@@ -317,14 +310,13 @@ module.exports = async (interaction) => {
         const pId = customId.split('_')[4];
         const col = isSupport ? 'support_role_id' : 'blacklist_role_id';
         await db.query(`UPDATE ticket_panels SET ${col} = $1 WHERE guild_id = $2 AND panel_id = $3`, [values[0], guildId, pId]);
-      
         const res = await db.query('SELECT support_role_id, blacklist_role_id FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guildId, pId]);
         const p = res.rows[0];
         const embed = new EmbedBuilder().setTitle('👥 Roles').setDescription(`Config for **${pId}**\n\n> **Support:** ${p.support_role_id ? `<@&${p.support_role_id}>` : '`Not Set`'}\n> **Blacklist:** ${p.blacklist_role_id ? `<@&${p.blacklist_role_id}>` : '`Not Set`'}`).setColor('#F1C40F').setFooter({ text: 'Made by: ukirama' });
         const r1 = new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId(`tkt_save_role_support_${pId}`).setPlaceholder('Select Support Role'));
         const r2 = new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId(`tkt_save_role_blacklist_${pId}`).setPlaceholder('Select Blacklist Role'));
         const r3 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`tkt_back_${pId}`).setLabel('Back').setStyle(ButtonStyle.Secondary));
-        return await smartReply(interaction, { embeds: [embed], components: [r1, r2, r3] });
+        return await smartReply(interaction, { content: null, embeds: [embed], components: [r1, r2, r3] });
     }
 
     if (customId.startsWith('tkt_gen_')) { 
@@ -336,7 +328,7 @@ module.exports = async (interaction) => {
         const c1 = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId(`tkt_save_cat_${pId}`).setPlaceholder('Select Category').addChannelTypes(ChannelType.GuildCategory));
         const c2 = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId(`tkt_save_log_${pId}`).setPlaceholder('Select Log Channel').addChannelTypes(ChannelType.GuildText));
         const c3 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`tkt_back_${pId}`).setLabel('Back').setStyle(ButtonStyle.Secondary));
-        return await smartReply(interaction, { embeds: [embed], components: [c1, c2, c3] });
+        return await smartReply(interaction, { content: null, embeds: [embed], components: [c1, c2, c3] });
     }
 
     if (interaction.isChannelSelectMenu() && (customId.startsWith('tkt_save_cat_') || customId.startsWith('tkt_save_log_'))) {
@@ -351,12 +343,22 @@ module.exports = async (interaction) => {
         const c1 = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId(`tkt_save_cat_${pId}`).setPlaceholder('Select Category').addChannelTypes(ChannelType.GuildCategory));
         const c2 = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId(`tkt_save_log_${pId}`).setPlaceholder('Select Log Channel').addChannelTypes(ChannelType.GuildText));
         const c3 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`tkt_back_${pId}`).setLabel('Back').setStyle(ButtonStyle.Secondary));
-        return await smartReply(interaction, { embeds: [embed], components: [c1, c2, c3] });
+        return await smartReply(interaction, { content: null, embeds: [embed], components: [c1, c2, c3] });
     }
 
     if (customId.startsWith('tkt_back_')) { if (!await safeDefer(interaction, true)) return; return showPanelDashboard(interaction, db, guildId, customId.replace('tkt_back_', '')); }
     if (customId === 'ticket_panel_create') { const modal = new ModalBuilder().setCustomId('ticket_panel_create_modal').setTitle('New Panel'); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_unique_id').setLabel("Internal ID").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_title').setLabel("Title").setStyle(TextInputStyle.Short).setRequired(true))); return await interaction.showModal(modal); }
     if (customId === 'ticket_panel_create_modal') { if (!await safeDefer(interaction, true)) return; const pId = fields.getTextInputValue('panel_unique_id').toLowerCase().replace(/[^a-z0-9-_]/g, ''); const title = fields.getTextInputValue('panel_title'); await db.query(`INSERT INTO ticket_panels (guild_id, panel_id, title) VALUES ($1, $2, $3)`, [guildId, pId, title]); return showPanelDashboard(interaction, db, guildId, pId); }
-    if (customId.startsWith('tkt_preview_')) { if (!await safeDefer(interaction, true)) return; const pId = customId.replace('tkt_preview_', ''); const menu = new ChannelSelectMenuBuilder().setCustomId(`tkt_deploy_final_${pId}`).setPlaceholder('Destination...').addChannelTypes(ChannelType.GuildText); await smartReply(interaction, { embeds: [new EmbedBuilder().setTitle('📨 Post').setDescription('Select channel.').setColor('#2ECC71')], components: [new ActionRowBuilder().addComponents(menu)] }); }
-    if (interaction.isChannelSelectMenu() && customId.startsWith('tkt_deploy_final_')) { if (!await safeDefer(interaction, true)) return; const pId = customId.split('_')[3]; const res = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guildId, pId]); const p = res.rows[0]; const target = guild.channels.cache.get(values[0]); const openBtn = new ButtonBuilder().setCustomId(`ticket_open_${pId}`).setLabel(p.button_label).setStyle(ButtonStyle[p.button_style] || ButtonStyle.Primary).setEmoji(p.button_emoji); await target.send({ embeds: [new EmbedBuilder().setTitle(p.title).setDescription(p.description).setColor(p.panel_color).setFooter({ text: 'Made by: ukirama' })], components: [new ActionRowBuilder().addComponents(openBtn)] }); return await smartReply(interaction, { embeds: [success(`Panel posted in <#${values[0]}>`)] }); }
+    if (customId.startsWith('tkt_preview_')) { if (!await safeDefer(interaction, true)) return; const pId = customId.replace('tkt_preview_', ''); const menu = new ChannelSelectMenuBuilder().setCustomId(`tkt_deploy_final_${pId}`).setPlaceholder('Destination...').addChannelTypes(ChannelType.GuildText); await smartReply(interaction, { content: null, embeds: [new EmbedBuilder().setTitle('📨 Post').setDescription('Select channel.').setColor('#2ECC71')], components: [new ActionRowBuilder().addComponents(menu)] }); }
+    
+    if (interaction.isChannelSelectMenu() && customId.startsWith('tkt_deploy_final_')) { 
+        if (!await safeDefer(interaction, true)) return; 
+        const pId = customId.split('_')[3]; 
+        const res = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guildId, pId]); 
+        const p = res.rows[0]; 
+        const target = guild.channels.cache.get(values[0]); 
+        const openBtn = new ButtonBuilder().setCustomId(`ticket_open_${pId}`).setLabel(p.button_label).setStyle(ButtonStyle[p.button_style] || ButtonStyle.Primary).setEmoji(p.button_emoji); 
+        await target.send({ embeds: [new EmbedBuilder().setTitle(p.title).setDescription(p.description).setColor(p.panel_color || '#5865F2').setFooter({ text: 'Made by: ukirama' })], components: [new ActionRowBuilder().addComponents(openBtn)] }); 
+        return await smartReply(interaction, { content: null, embeds: [success(`Panel posted in <#${values[0]}>`)] }); 
+    }
 };
