@@ -9,14 +9,27 @@ module.exports = async (interaction) => {
 
     if (customId === 'delete_all_data') {
         if (!await safeDefer(interaction, false, true)) return; 
-        const confirmBtn = new ButtonBuilder().setCustomId('confirm_delete_data').setLabel('CONFIRM DELETION').setStyle(ButtonStyle.Danger);
-        const cancelBtn = new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('Cancel').setStyle(ButtonStyle.Secondary);
-        await interaction.editReply({ embeds: [error('⚠️ **DANGER ZONE** ⚠️\nThis will delete ALL configuration, logs, rules and appeals for this server.\nThis action cannot be undone.')], components: [new ActionRowBuilder().addComponents(confirmBtn, cancelBtn)] });
+        
+        const confirmBtn = new ButtonBuilder()
+            .setCustomId('confirm_delete_data')
+            .setLabel('CONFIRM DELETION')
+            .setStyle(ButtonStyle.Danger);
+            
+        const cancelBtn = new ButtonBuilder()
+            .setCustomId('setup_home')
+            .setLabel('Cancel')
+            .setStyle(ButtonStyle.Secondary);
+
+        await interaction.editReply({ 
+            embeds: [error('⚠️ **DANGER ZONE** ⚠️\nThis will delete ALL configuration, logs, rules and appeals for this server.\nThis action cannot be undone.')], 
+            components: [new ActionRowBuilder().addComponents(confirmBtn, cancelBtn)] 
+        });
         return;
     }
 
     if (customId === 'confirm_delete_data') {
         if (!await safeDefer(interaction, true)) return;
+        
         await db.query("DELETE FROM automod_rules WHERE guildid = $1", [guildId]);
         await db.query("DELETE FROM modlogs WHERE guildid = $1", [guildId]);
         await db.query("DELETE FROM command_permissions WHERE guildid = $1", [guildId]);
@@ -27,6 +40,10 @@ module.exports = async (interaction) => {
         await db.query("DELETE FROM guild_backups WHERE guildid = $1", [guildId]); 
         await db.query("DELETE FROM ticket_panels WHERE guild_id = $1", [guildId]);
         await db.query("DELETE FROM tickets WHERE guild_id = $1", [guildId]);
+
+        await db.query("DELETE FROM lockdown_channels WHERE guildid = $1", [guildId]);
+        await db.query("DELETE FROM lockdown_backups WHERE guildid = $1", [guildId]);
+        await db.query("DELETE FROM afk_users WHERE guildid = $1", [guildId]);
 
         await interaction.editReply({ embeds: [success('All data for this guild has been wiped from the database.')], components: [] });
         return;

@@ -2,7 +2,6 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const ms = require('ms');
 const { emojis } = require('../../utils/config.js');
 const { safeDefer } = require('../../utils/interactionHelpers.js');
-// IMPORTAMOS LA FÁBRICA AQUÍ 👇
 const { success, error } = require('../../utils/embedFactory.js');
 
 module.exports = async (interaction) => {
@@ -12,7 +11,6 @@ module.exports = async (interaction) => {
     
     const setupCommand = client.commands.get('setup');
     const generateSetupContent = setupCommand?.generateSetupContent;
-
 
     if (customId === 'automod_add_rule') {
         if (!await safeDefer(interaction, true)) return;
@@ -35,10 +33,11 @@ module.exports = async (interaction) => {
 
     if (customId === 'setup_automod') { 
         if (!await safeDefer(interaction, true)) return;
+        
         const btns = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('automod_add_rule').setLabel('Add Rule').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('automod_remove_rule').setLabel('Remove Rule').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('setup_back_to_main').setLabel('Back').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId('setup_home').setLabel('Back').setStyle(ButtonStyle.Secondary) 
         );
         
         const rulesRes = await db.query('SELECT * FROM automod_rules WHERE guildid = $1 ORDER BY warnings_count ASC', [guildId]);
@@ -56,7 +55,6 @@ module.exports = async (interaction) => {
         return;
     }
 
-   
     if (customId === 'automod_action_select') {
         if (!await safeDefer(interaction, true)) return;
         const action = values[0];
@@ -67,7 +65,6 @@ module.exports = async (interaction) => {
         return;
     }
 
-    
     if (customId === 'automod_warn_select') {
         const [warnCountStr, actionType] = values[0].split(':');
         const warnCount = parseInt(warnCountStr, 10);
@@ -78,7 +75,6 @@ module.exports = async (interaction) => {
             
             if (generateSetupContent) {
                 const { embed, components } = await generateSetupContent(interaction, guildId);
-               
                 await interaction.editReply({ content: null, embeds: [success(`Automod rule saved: **${warnCount} Warns -> KICK**`), embed], components });
             } else await interaction.editReply({ embeds: [success(`Automod rule saved.`)] });
             return;
@@ -107,7 +103,6 @@ module.exports = async (interaction) => {
         if (!await safeDefer(interaction, false, true)) return;
         const rulesResult = await db.query('SELECT rule_order, warnings_count, action_type, action_duration FROM automod_rules WHERE guildid = $1 ORDER BY warnings_count ASC', [guildId]);
         
-      
         if (rulesResult.rows.length === 0) return interaction.editReply({ embeds: [error('No rules found to remove.')] });
         
         const options = rulesResult.rows.map(rule => ({ 
@@ -117,10 +112,10 @@ module.exports = async (interaction) => {
         }));
         
         const menu = new StringSelectMenuBuilder().setCustomId('automod_select_remove').setPlaceholder('Select rule to remove...').addOptions(options);
-        await interaction.editReply({ content: 'Select rule to delete:', components: [new ActionRowBuilder().addComponents(menu)] });
+        const back = new ButtonBuilder().setCustomId('setup_automod').setLabel('Back').setStyle(ButtonStyle.Secondary);
+        await interaction.editReply({ content: 'Select rule to delete:', components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(back)] });
         return;
     }
-
 
     if (customId === 'automod_select_remove') {
         await safeDefer(interaction, true);
@@ -129,7 +124,6 @@ module.exports = async (interaction) => {
         
         if (generateSetupContent) {
             const { embed, components } = await generateSetupContent(interaction, guildId);
-       
             await interaction.editReply({ content: null, embeds: [success(`Rule deleted.`), embed], components });
         } else await interaction.editReply({ embeds: [success('Deleted.')] });
         return;
@@ -150,17 +144,13 @@ module.exports = async (interaction) => {
                 finalDuration = null; 
             } else {
                 if (!msDuration || msDuration <= 0) {
-                  
                     return interaction.editReply({ embeds: [error(`**Invalid Duration.**\nFor a temporary ban, use format like \`7d\`, \`24h\`.\nFor **Permanent**, type \`0\`.`)] });
                 }
                 finalDuration = durationStr;
             }
         } 
-        
-        
         else if (actionType === 'MUTE') {
             if (!msDuration) {
-                
                 return interaction.editReply({ embeds: [error(`**Invalid Duration.** Please use a valid format like \`10m\`, \`1h\`, \`1d\`.`)] });
             }
             if (msDuration < 10000) { 
@@ -176,7 +166,6 @@ module.exports = async (interaction) => {
 
         if (generateSetupContent) {
             const { embed, components } = await generateSetupContent(interaction, guildId);
-            
             await interaction.editReply({ content: null, embeds: [success(`Automod Rule Saved: **${warnCount} Warns -> ${actionType}** (${finalDuration || 'Permanent'})`), embed], components });
         } else await interaction.editReply({ embeds: [success(`Saved.`)] });
         return;

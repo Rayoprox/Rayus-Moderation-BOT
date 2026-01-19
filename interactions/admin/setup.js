@@ -1,77 +1,59 @@
-const { 
-    SlashCommandBuilder, 
-    PermissionsBitField 
-} = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const { safeDefer } = require('../../utils/interactionHelpers.js');
 
 const setupHome = require('./setup_sections/home.js');
+const setupMenus = require('./setup_sections/menus.js'); 
 const setupChannels = require('./setup_sections/channels.js');
 const setupRoles = require('./setup_sections/roles.js');
 const setupPermissions = require('./setup_sections/permissions.js');
 const setupAntinuke = require('./setup_sections/antinuke.js');
 const setupReset = require('./setup_sections/reset.js');
 
+const setupAutomod = require('./automod.js'); 
+
 module.exports = {
-    deploy: 'main',
-    data: new SlashCommandBuilder()
-        .setName('setup')
-        .setDescription('Shows the main setup panel.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
-
-    generateSetupContent: setupHome.generateSetupContent,
-
     async execute(interaction) {
         const { customId } = interaction;
 
-        if (!interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isRoleSelectMenu() && !interaction.isChannelSelectMenu()) {
-            if (!await safeDefer(interaction, true)) return;
-            const { embed, components } = await setupHome.generateSetupContent(interaction, interaction.guild.id);
-            await interaction.editReply({ embeds: [embed], components });
-            return;
-        }
-
-  
-        if (customId === 'setup_home' || customId === 'setup_back_to_main') {
+        // HOME
+        if (customId === 'setup_home') {
             if (!await safeDefer(interaction, true)) return;
             const { embed, components } = await setupHome.generateSetupContent(interaction, interaction.guild.id);
             await interaction.editReply({ embeds: [embed], components });
             return;
         }
         
- 
-        if (customId === 'cancel_setup') {
-            try {
-              
-                if (!interaction.deferred && !interaction.replied) {
-                    await interaction.deferUpdate(); 
-                }
-              
-                await interaction.deleteReply().catch(() => {});
-            } catch (err) {
-          
-                if (err.code !== 10062) console.error('Error in cancel_setup:', err);
-            }
-            return;
+        // MENUS INTERMEDIOS 
+        if (customId.startsWith('setup_menu_') || customId.startsWith('setup_lockdown') || customId === 'select_lockdown_channels') {
+            return await setupMenus(interaction);
         }
 
-       
-        if (customId.startsWith('setup_channels') || customId.endsWith('_channel') || customId === 'select_delete_channel') {
+        // CHANNELS
+        if (customId.startsWith('setup_channels')) {
             return await setupChannels(interaction);
         }
 
+        // AUTOMOD
+        if (customId.startsWith('setup_automod') || customId.startsWith('automod_')) {
+            return await setupAutomod(interaction);
+        }
+
+        // STAFF ROLES
         if (customId.startsWith('setup_staff') || customId === 'select_staff_roles') {
             return await setupRoles(interaction);
         }
 
-   
+        // COMMAND PERMISSIONS
         if (customId.startsWith('setup_perm') || customId.startsWith('select_command_perms') || customId.startsWith('perms_role_select_') || customId === 'select_delete_perm') {
             return await setupPermissions(interaction);
         }
 
+        // ANTI-NUKE
         if (customId.startsWith('setup_antinuke') || customId.startsWith('antinuke_')) {
             return await setupAntinuke(interaction);
         }
 
+        // RESET
         if (customId === 'delete_all_data' || customId === 'confirm_delete_data') {
             return await setupReset(interaction);
         }

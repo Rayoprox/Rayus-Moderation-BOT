@@ -4,13 +4,15 @@ const { emojis } = require('../../utils/config.js');
 
 module.exports = {
     deploy: 'all',
-  
+    
+    isPublic: true, 
+
     data: new SlashCommandBuilder()
         .setName('help')
         .setDescription('Displays a list of commands you can use.'),
 
     async execute(interaction) {
-       
+        
         const { client, user, guild } = interaction;
         const commands = client.commands; 
         const member = interaction.member;
@@ -21,7 +23,6 @@ module.exports = {
 
         const commandCategories = { admin: [], utility: [], appeal: [] };
         
-   
         const allPermissionsResult = await db.query('SELECT command_name, role_id FROM command_permissions WHERE guildid = $1', [guildId]);
         const permMap = allPermissionsResult.rows.reduce((acc, row) => {
             if (!acc[row.command_name]) acc[row.command_name] = [];
@@ -29,36 +30,41 @@ module.exports = {
             return acc;
         }, {});
     
+      
         for (const command of commands.values()) {
             let hasPermission = member.permissions.has(PermissionsBitField.Flags.Administrator);
             
+         
             if (!hasPermission) {
+             
                 const allowedRoles = permMap[command.data.name] || [];
                 if (allowedRoles.length > 0) {
                     hasPermission = member.roles.cache.some(role => allowedRoles.some(rule => rule.role_id === role.id));
-                } else if (command.data.default_member_permissions) {
+                } 
+              
+                else if (command.data.default_member_permissions) {
                     hasPermission = member.permissions.has(command.data.default_member_permissions);
-                } else {
+                } 
+              
+                else if (command.isPublic || !command.adminOnly) {
                     hasPermission = true; 
                 }
             }
 
             if (hasPermission) {
-                
                 const options = command.data.options.map(opt => opt.required ? `<${opt.name}>` : `[${opt.name}]`);
-                
                 let commandHeader = `> **/${command.data.name}**`;
                 
-               
                 if (options.length > 0) {
                     commandHeader += ` \`${options.join(' ')}\``;
                 }
 
                 const formattedCommand = `${commandHeader}\n> *${command.data.description}*`;
 
+           
                 switch(command.deploy) {
                     case 'main':
-                        if (['ban', 'kick', 'mute', 'unmute', 'modlogs', 'warnings', 'purge', 'reason', 'void', 'warn', 'unban', 'blmanage', 'setup', 'lock', 'unlock', 'softban', 'case', 'whois'].includes(command.data.name)) {
+                        if (['ban', 'kick', 'mute', 'unmute', 'modlogs', 'warnings', 'purge', 'reason', 'void', 'warn', 'unban', 'blmanage', 'setup', 'lock', 'unlock', 'softban', 'case', 'whois', 'lockdown', 'unlockdown', 'slowmode'].includes(command.data.name)) {
                             commandCategories.admin.push(formattedCommand);
                         } else {
                             commandCategories.utility.push(formattedCommand);
@@ -76,7 +82,6 @@ module.exports = {
             }
         }
 
-        
         const helpEmbed = new EmbedBuilder()
             .setColor(0x5865F2)
             .setTitle(`${book} Universal Piece Help Menu`)
@@ -88,7 +93,6 @@ module.exports = {
             })
             .setTimestamp();
 
-        
         const addSplitFields = (embed, title, items) => {
             if (!items || items.length === 0) return;
             
