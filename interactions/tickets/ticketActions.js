@@ -24,6 +24,11 @@ async function closeTicket(interaction, client, reason = 'No reason provided') {
     const panelRes = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guild.id, ticketData.panel_id]);
     const panelData = panelRes.rows[0];
 
+    await channel.permissionOverwrites.set([
+        { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+        { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] }
+    ]);
+
     try {
         const transcript = await discordTranscripts.createTranscript(channel, {
             limit: -1,
@@ -33,43 +38,58 @@ async function closeTicket(interaction, client, reason = 'No reason provided') {
             poweredBy: false
         });
 
+        const closeTime = Date.now();
+        const durationSeconds = Math.floor((closeTime - Number(ticketData.created_at)) / 1000);
+        const hours = Math.floor(durationSeconds / 3600);
+        const minutes = Math.floor((durationSeconds % 3600) / 60);
+        const durationText = `${hours}h ${minutes}m`;
+
+        const logEmbed = new EmbedBuilder()
+            .setTitle('🎫 Ticket Closed & Archived')
+            .setColor('#FF4B4B')
+            .setThumbnail(user.displayAvatarURL())
+            .addFields(
+                { name: 'Author', value: `<@${ticketData.user_id}>`, inline: true },
+                { name: 'Closed By', value: `<@${user.id}>`, inline: true },
+                { name: 'Panel', value: `\`${panelData?.title || 'Unknown'}\``, inline: true },
+                { name: 'Reason', value: `\`${reason}\``, inline: false },
+                { name: 'Opened At', value: `<t:${Math.floor(Number(ticketData.created_at) / 1000)}:f>`, inline: false },
+                { name: 'Closed At', value: `<t:${Math.floor(closeTime / 1000)}:f>`, inline: false },
+                { name: 'Duration', value: `\`${durationText}\``, inline: true }
+            )
+            .setFooter({ text: `Ticket ID: ${channel.id} • Made by: ukirama` })
+            .setTimestamp();
+
         if (panelData && panelData.log_channel_id) {
             const logChannel = guild.channels.cache.get(panelData.log_channel_id);
             if (logChannel) {
-                const closeTime = Date.now();
-                const duration = Math.floor((closeTime - Number(ticketData.created_at)) / 1000);
-                const hours = Math.floor(duration / 3600);
-                const minutes = Math.floor((duration % 3600) / 60);
-
-                const logEmbed = new EmbedBuilder()
-                    .setTitle('🎫 Ticket Closed & Archived')
-                    .setColor('#FF4B4B')
-                    .setThumbnail(user.displayAvatarURL())
-                    .addFields(
-                        { name: 'Author', value: `<@${ticketData.user_id}>`, inline: true },
-                        { name: 'Closed By', value: `<@${user.id}>`, inline: true },
-                        { name: 'Panel', value: `\`${panelData.title}\``, inline: true },
-                        { name: 'Reason', value: `\`${reason}\``, inline: false },
-                        { name: 'Opened At', value: `<t:${Math.floor(Number(ticketData.created_at) / 1000)}:f>`, inline: false },
-                        { name: 'Closed At', value: `<t:${Math.floor(closeTime / 1000)}:f>`, inline: false },
-                        { name: 'Duration', value: `\`${hours}h ${minutes}m\``, inline: true }
-                    )
-                    .setFooter({ text: `Ticket ID: ${channel.id} • Made by: ukirama` })
-                    .setTimestamp();
-
                 await logChannel.send({ embeds: [logEmbed], files: [transcript] });
             }
         }
 
-        await db.query("UPDATE tickets SET status = 'CLOSED', closed_at = $1, closed_by = $2, close_reason = $3 WHERE channel_id = $4", [Date.now(), user.id, reason, channel.id]);
+        const ticketAuthor = await client.users.fetch(ticketData.user_id).catch(() => null);
+        if (ticketAuthor) {
+            const dmEmbed = new EmbedBuilder()
+                .setTitle('🎫 Ticket Closed Summary')
+                .setDescription(`Your ticket in **${guild.name}** has been closed.`)
+                .setColor('#5865F2')
+                .addFields(
+                    { name: 'Reason', value: `\`${reason}\``, inline: true },
+                    { name: 'Duration', value: `\`${durationText}\``, inline: true }
+                )
+                .setFooter({ text: `Made by: ukirama` })
+                .setTimestamp();
+
+            await ticketAuthor.send({ embeds: [dmEmbed], files: [transcript] }).catch(() => {});
+        }
+
+        await db.query("UPDATE tickets SET status = 'CLOSED', closed_at = $1, closed_by = $2, close_reason = $3 WHERE channel_id = $4", [closeTime, user.id, reason, channel.id]);
         
-        setTimeout(() => {
-            channel.delete().catch(() => {});
-        }, 2000);
+        await channel.delete().catch(() => {});
 
     } catch (err) {
         console.error(err);
-        channel.delete().catch(() => {});
+        await channel.delete().catch(() => {});
     }
 }
 
