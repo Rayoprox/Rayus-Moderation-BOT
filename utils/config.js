@@ -1,14 +1,9 @@
 // Archivo: utils/config.js
 
 
-const SUPREME_IDS = [
-    '1144150864911671336', // Me
-    '536498229060173825', // Nothing
-    '674608541008658454', // BiBoss
-     '715926664344895559',
-    
-];
-
+const SUPREME_IDS = process.env.SUPREME_IDS 
+    ? process.env.SUPREME_IDS.split(',').map(id => id.trim()) 
+    : [];
 module.exports = {
 
     STAFF_COMMANDS: [

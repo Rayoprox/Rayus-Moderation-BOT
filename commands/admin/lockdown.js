@@ -23,7 +23,6 @@ module.exports = {
             if (!channel) continue;
 
             try {
-            
                 const currentOverwrites = channel.permissionOverwrites.cache.map(o => ({
                     id: o.id,
                     type: o.type,

@@ -1,12 +1,12 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const db = require('../../utils/db.js');
+const { success, error } = require('../../utils/embedFactory.js');
 
 module.exports = {
     deploy: 'main',
     data: new SlashCommandBuilder()
         .setName('bypass')
         .setDescription('Whitelist a User/Bot ID from Anti-Nuke.')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addStringOption(option => 
             option.setName('id')
                 .setDescription('The ID to whitelist')
@@ -19,19 +19,18 @@ module.exports = {
                     { name: 'Add', value: 'add' },
                     { name: 'Remove', value: 'remove' }
                 )),
+
     async execute(interaction) {
-       
-        
         const id = interaction.options.getString('id');
         const action = interaction.options.getString('action');
         const guildId = interaction.guild.id;
 
         if (action === 'add') {
             await db.query('INSERT INTO bot_whitelist (guildid, targetid) VALUES ($1, $2) ON CONFLICT DO NOTHING', [guildId, id]);
-            await interaction.editReply({ content: `✅ ID \`${id}\` has been **added** to the Anti-Nuke whitelist.` });
+            await interaction.editReply({ embeds: [success(`ID \`${id}\` has been **added** to the Anti-Nuke whitelist.`)] });
         } else {
             await db.query('DELETE FROM bot_whitelist WHERE guildid = $1 AND targetid = $2', [guildId, id]);
-            await interaction.editReply({ content: `🗑️ ID \`${id}\` has been **removed** from the whitelist.` });
+            await interaction.editReply({ embeds: [success(`ID \`${id}\` has been **removed** from the whitelist.`)] });
         }
     },
 };

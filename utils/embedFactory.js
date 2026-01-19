@@ -1,35 +1,31 @@
 const { EmbedBuilder } = require('discord.js');
 const { emojis } = require('./config.js');
 
-const COLORS = {
-    SUCCESS: 0x2ECC71, // Verde Esmeralda
-    ERROR: 0xE74C3C,   // Rojo Alizarin
-    WARNING: 0xF1C40F, // Amarillo Girasol
-    INFO: 0x3498DB     // Azul Peter River
+const createEmbed = (type, description) => {
+    let color, titleEmoji;
+    
+    switch (type) {
+        case 'success':
+            color = 0x2ECC71; 
+            titleEmoji = emojis?.check || '✅';
+            break;
+        case 'error':
+            color = 0xE74C3C; 
+            titleEmoji = emojis?.cross || '❌';
+            break;
+        default:
+            color = 0x3498DB; 
+            titleEmoji = 'ℹ️';
+    }
+
+    return new EmbedBuilder()
+        .setColor(color)
+        .setDescription(`${titleEmoji} ${description}`);
+       
 };
 
 module.exports = {
-    success: (text) => {
-        return new EmbedBuilder()
-            .setColor(COLORS.SUCCESS)
-            .setDescription(`${emojis.success || '✅'} ${text}`);
-    },
-
-    error: (text) => {
-        return new EmbedBuilder()
-            .setColor(COLORS.ERROR)
-            .setDescription(`${emojis.error || '❌'} ${text}`);
-    },
-
-    warning: (text) => {
-        return new EmbedBuilder()
-            .setColor(COLORS.WARNING)
-            .setDescription(`${emojis.warn || '⚠️'} ${text}`);
-    },
-
-    info: (text) => {
-        return new EmbedBuilder()
-            .setColor(COLORS.INFO)
-            .setDescription(`${emojis.info || 'ℹ️'} ${text}`);
-    }
+    success: (text) => createEmbed('success', text),
+    error: (text) => createEmbed('error', text),
+    info: (text) => createEmbed('info', text)
 };
