@@ -1,13 +1,13 @@
-const { PermissionsBitField, EmbedBuilder } = require('discord.js');
+const { PermissionsBitField } = require('discord.js');
 const db = require('../utils/db.js');
-const { SUPREME_IDS, STAFF_COMMANDS, emojis } = require('../utils/config.js');
+const { DEVELOPER_IDS, SUPREME_IDS, STAFF_COMMANDS } = require('../utils/config.js');
 const { safeDefer } = require('../utils/interactionHelpers.js');
 const { error } = require('../utils/embedFactory.js');
 const guildCache = require('../utils/guildCache.js'); 
 
-async function executeCommand(interaction, client) { 
-    const botClient = client || interaction.client;
-    const command = botClient.commands.get(interaction.commandName);
+module.exports = async (interaction) => {
+    const client = interaction.client; 
+    const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
     const { guild, user, member } = interaction;
@@ -15,112 +15,70 @@ async function executeCommand(interaction, client) {
 
     if (!await safeDefer(interaction, false, !isPublic)) return;
 
+   
+    if (DEVELOPER_IDS.includes(user.id)) {
+        return await command.execute(interaction);
+    }
+
+ 
+    if (command.data.name !== 'redeem') {
+        const licRes = await db.query("SELECT expires_at FROM licenses WHERE guild_id = $1", [guild.id]);
+        const hasLicense = licRes.rows.length > 0 && (licRes.rows[0].expires_at === null || parseInt(licRes.rows[0].expires_at) > Date.now());
+        
+        if (!hasLicense) {
+            return interaction.editReply({ embeds: [error("🔒 **License Required**\nThis bot instance is locked. The owner must use `/redeem`.")] });
+        }
+    }
+
     if (SUPREME_IDS.includes(user.id)) {
-        try { 
-            await command.execute(interaction); 
-        } catch (e) { console.error(e); }
-        return;
+        return await command.execute(interaction);
     }
 
     try {
         let guildData = guildCache.get(guild.id);
-
         if (!guildData) {
             const [settingsRes, permsRes] = await Promise.all([
                 db.query('SELECT universal_lock, staff_roles FROM guild_settings WHERE guildid = $1', [guild.id]),
                 db.query('SELECT command_name, role_id FROM command_permissions WHERE guildid = $1', [guild.id])
             ]);
-
-            guildData = {
-                settings: settingsRes.rows[0] || {},
-                permissions: permsRes.rows
-            };
+            guildData = { settings: settingsRes.rows[0] || {}, permissions: permsRes.rows };
             guildCache.set(guild.id, guildData);
         }
 
-        const settings = guildData.settings;
-        const universalLock = settings.universal_lock === true;
-        const staffRoles = settings.staff_roles ? settings.staff_roles.split(',').filter(r => r) : [];
+        const universalLock = guildData.settings.universal_lock === true;
+        const staffRoles = guildData.settings.staff_roles?.split(',') || [];
+        const specificRoles = guildData.permissions.filter(p => p.command_name === command.data.name).map(r => r.role_id);
         
-        const specificAllowedRoles = guildData.permissions
-            .filter(p => p.command_name === command.data.name)
-            .map(r => r.role_id);
-        
-        const memberRoles = member.roles.cache;
-        
-      
         let isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
-        
-  
-        if (universalLock && isAdmin) {
-            isAdmin = false; 
-        }
+        if (universalLock) isAdmin = false; 
 
-        const isGlobalStaff = memberRoles.some(r => staffRoles.includes(r.id));
-        const hasSpecificRules = specificAllowedRoles.length > 0; 
-        const hasSpecificPermission = hasSpecificRules && memberRoles.some(r => specificAllowedRoles.includes(r.id));
+        const isGlobalStaff = member.roles.cache.some(r => staffRoles.includes(r.id));
+        const hasSpecificRules = specificRoles.length > 0;
+        const hasSpecificPermission = hasSpecificRules && member.roles.cache.some(r => specificRoles.includes(r.id));
 
-        let isAllowed = false;
-        let errorMessage = '⛔ You do not have permission to use this command.';
-
+        let allowed = false;
 
         if (isAdmin) {
-            isAllowed = true;
-        }
-        else if (hasSpecificRules) {
-            if (hasSpecificPermission) {
-                isAllowed = true;
-            } else {
-                isAllowed = false;
-                errorMessage = `⛔ This command is restricted to specific roles only.`;
-            }
-        }
-        else if (isGlobalStaff && STAFF_COMMANDS.includes(command.data.name)) {
-            isAllowed = true;
-        }
-        else if (isPublic) {
-            isAllowed = true;
-        }
-        else if (!hasSpecificRules && !isGlobalStaff && command.data.default_member_permissions) {
-             if (member.permissions.has(command.data.default_member_permissions)) isAllowed = true;
+            allowed = true; 
+        } else if (hasSpecificRules) {
+            if (hasSpecificPermission) allowed = true;
+        } else if (isGlobalStaff && STAFF_COMMANDS.includes(command.data.name)) {
+            allowed = true;
+        } else if (isPublic) {
+            allowed = true;
         }
 
-        if (!isAllowed) {
-            if (universalLock && member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                 errorMessage = `🔒 **Universal Lockdown Active**\nAdmin permissions are suspended. You need a specific role or Staff access configured in the database.`;
-            }
-            return interaction.editReply({ embeds: [error(errorMessage)], content: null });
+        if (!allowed) {
+            const msg = universalLock && member.permissions.has(PermissionsBitField.Flags.Administrator)
+                ? "🔒 **Universal Lockdown Active.**\nAdmin permissions are suspended by the Instance Owners."
+                : "⛔ You don't have permission to use this.";
+            return interaction.editReply({ embeds: [error(msg)] });
         }
     
-        // Ejecución
         await command.execute(interaction);
-        sendCommandLog(interaction, db, isAdmin || SUPREME_IDS.includes(user.id)).catch(console.warn);
 
     } catch (err) {
-        console.error(`Error executing ${interaction.commandName}:`, err);
-        if (interaction.replied || interaction.deferred) await interaction.editReply({ embeds: [error('An unexpected error occurred!')] }).catch(() => {});
+        console.error(`[HANDLER ERROR] ${interaction.commandName}:`, err);
+        await interaction.editReply({ embeds: [error('An internal error occurred.')] }).catch(() => {});
     }
-}
-
-async function sendCommandLog(interaction, db, isAdmin) {
-    try {
-        const cmdLogResult = await db.query('SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = $2', [interaction.guild.id, 'cmdlog']);
-        if (cmdLogResult.rows[0]?.channel_id) {
-            const channel = interaction.guild.channels.cache.get(cmdLogResult.rows[0].channel_id);
-            if (channel) {
-                const logEmbed = new EmbedBuilder()
-                    .setColor(isAdmin ? 0x2B2D31 : 0x3498DB) 
-                    .setAuthor({ name: 'Command Executed', iconURL: interaction.user.displayAvatarURL() })
-                    .setDescription(`**Command:** \`${interaction.toString()}\``)
-                    .addFields(
-                        { name: '👤 User', value: `${interaction.user} (\`${interaction.user.id}\`)`, inline: true },
-                        { name: '📺 Channel', value: `${interaction.channel} (\`${interaction.channel.id}\`)`, inline: true }
-                    )
-                    .setTimestamp();
-                channel.send({ embeds: [logEmbed] }).catch(() => {}); 
-            }
-        }
-    } catch (e) {}
-}
-
-module.exports = executeCommand;
+};

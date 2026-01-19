@@ -26,7 +26,16 @@ const db = {
         await db.query(`CREATE TABLE IF NOT EXISTS afk_users (guildid TEXT NOT NULL, userid TEXT NOT NULL, reason TEXT, timestamp BIGINT, PRIMARY KEY (guildid, userid));`);
         await db.query(`CREATE TABLE IF NOT EXISTS lockdown_channels (guildid TEXT NOT NULL, channel_id TEXT NOT NULL, PRIMARY KEY (guildid, channel_id));`);
         await db.query(`CREATE TABLE IF NOT EXISTS lockdown_backups (guildid TEXT NOT NULL, channel_id TEXT NOT NULL, permissions_json TEXT NOT NULL, PRIMARY KEY (guildid, channel_id));`);
-        
+        await db.query(`
+    CREATE TABLE IF NOT EXISTS licenses (
+        key TEXT PRIMARY KEY,
+        guild_id TEXT UNIQUE,
+        redeemed_by TEXT,
+        created_at BIGINT,
+        expires_at BIGINT, -- NULL significa permanente/lifetime
+        type TEXT DEFAULT 'lifetime'
+    );
+`);
         try { await db.query(`ALTER TABLE modlogs RENAME COLUMN modid TO moderatorid`); } catch (e) {}
         try { await db.query(`ALTER TABLE modlogs ADD COLUMN moderatorid TEXT`); } catch (e) {}
         try { await db.query(`ALTER TABLE modlogs ADD COLUMN dmstatus TEXT`); } catch (e) {}

@@ -1,29 +1,30 @@
-// Archivo: utils/config.js
+// utils/config.js
+require('dotenv').config();
 
+const DEVELOPER_IDS = process.env.DEVELOPER_IDS 
+    ? process.env.DEVELOPER_IDS.split(',').map(id => id.trim()) 
+    : [];
 
 const SUPREME_IDS = process.env.SUPREME_IDS 
     ? process.env.SUPREME_IDS.split(',').map(id => id.trim()) 
     : [];
+
 module.exports = {
-
-    STAFF_COMMANDS: [
-        'ban', 'unban', 'softban', 'kick', 
-        'mute', 'unmute', 'warn', 'warnings', 'void',
-        'modlogs', 'case', 'reason', 'whois', 'purge',
-        'lock', 'unlock'
-    ],
-  
+    DEVELOPER_IDS,
     SUPREME_IDS,
-
+    STAFF_COMMANDS: [
+        'ban', 'unban', 'softban', 'kick', 'mute', 'unmute', 
+        'warn', 'warnings', 'void', 'modlogs', 'case', 
+        'reason', 'whois', 'purge', 'lock', 'unlock', 
+        'lockdown', 'unlockdown', 'slowmode'
+    ],
    
     emojis: {
-        // --- Emojis de Estado ---
         success: '<:checkemoji:1427318689014874175>',
         error: '<:cross:1427318691627929610>',
         loading: '<:loading:1427318696145064036>',
         info: 'ℹ️',
 
-        // --- Emojis de Moderación ---
         warn: '<:warning:1427318722233893144>',
         mute: '<:mute:1427318698464772148>',
         ban: '<:ban:1427320234737406104>',
@@ -34,7 +35,6 @@ module.exports = {
         unlock: '🔓',
         void: '<:void:1427318813636165653>',
         
-        // --- Otros Emojis Útiles ---
         user: '<:user:1427320097005109269>',
         moderator: '<:staff:1427318708279447632>',
         reason: '<:reason:1427320560559329371>',
