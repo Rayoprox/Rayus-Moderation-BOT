@@ -6,8 +6,7 @@ const {
     ModalBuilder, 
     TextInputBuilder, 
     TextInputStyle,
-    PermissionsBitField,
-    MessageFlags 
+    PermissionsBitField
 } = require('discord.js');
 const discordTranscripts = require('discord-html-transcripts');
 const { error, success } = require('../../utils/embedFactory.js');
@@ -24,6 +23,7 @@ async function closeTicket(interaction, client, reason = 'No reason provided') {
     const panelRes = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guild.id, ticketData.panel_id]);
     const panelData = panelRes.rows[0];
 
+    // Lock channel immediately for everyone except the bot
     await channel.permissionOverwrites.set([
         { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] }
@@ -62,9 +62,7 @@ async function closeTicket(interaction, client, reason = 'No reason provided') {
 
         if (panelData && panelData.log_channel_id) {
             const logChannel = guild.channels.cache.get(panelData.log_channel_id);
-            if (logChannel) {
-                await logChannel.send({ embeds: [logEmbed], files: [transcript] });
-            }
+            if (logChannel) await logChannel.send({ embeds: [logEmbed], files: [transcript] });
         }
 
         const ticketAuthor = await client.users.fetch(ticketData.user_id).catch(() => null);
@@ -111,21 +109,20 @@ async function claimTicket(interaction, client) {
     }
     await channel.permissionOverwrites.edit(user.id, { SendMessages: true, ViewChannel: true });
 
-    let targetMessage = message;
-    if (!targetMessage) {
-        const fetchedMessages = await channel.messages.fetch({ limit: 50 });
-        targetMessage = fetchedMessages.find(m => m.author.id === client.user.id && m.components.length > 0);
+    let targetMsg = message;
+    if (!targetMsg) {
+        const fetched = await channel.messages.fetch({ limit: 10 });
+        targetMsg = fetched.find(m => m.author.id === client.user.id && m.components.length > 0);
     }
 
-    if (targetMessage) {
-        const rows = targetMessage.components.map(oldRow => {
+    const claimEmbed = success(`${user} has **claimed** this ticket. Staff is now in read-only mode.`);
+
+    if (targetMsg) {
+        const rows = targetMsg.components.map(oldRow => {
             const row = ActionRowBuilder.from(oldRow);
             row.components.forEach(c => {
                 if (c.data.custom_id === 'ticket_action_claim') {
-                    c.setCustomId('ticket_action_unclaim')
-                     .setLabel('Unclaim Ticket')
-                     .setStyle(ButtonStyle.Danger)
-                     .setEmoji('🔓');
+                    c.setCustomId('ticket_action_unclaim').setLabel('Unclaim Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔓');
                 }
             });
             return row;
@@ -133,12 +130,13 @@ async function claimTicket(interaction, client) {
 
         if (interaction.isButton()) {
             await interaction.update({ components: rows });
+            await channel.send({ embeds: [claimEmbed] });
         } else {
-            await targetMessage.edit({ components: rows });
-            await smartReply(interaction, { embeds: [success(`${user} has **claimed** this ticket.`)] }, true);
+            await targetMsg.edit({ components: rows });
+            await smartReply(interaction, { embeds: [claimEmbed] });
         }
-    } else if (!interaction.replied) {
-        await smartReply(interaction, { embeds: [success(`${user} has **claimed** this ticket.`)] }, true);
+    } else {
+        await smartReply(interaction, { embeds: [claimEmbed] });
     }
 }
 
@@ -149,7 +147,7 @@ async function unclaimTicket(interaction, client) {
     const ticketData = ticketRes.rows[0];
 
     if (ticketData.participants !== user.id && !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return await smartReply(interaction, { embeds: [error('You are not the person who claimed this ticket.')] }, true);
+        return await smartReply(interaction, { embeds: [error('Only the current claimer or an Admin can unclaim.')] }, true);
     }
 
     const panelRes = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guild.id, ticketData.panel_id]);
@@ -163,21 +161,20 @@ async function unclaimTicket(interaction, client) {
         await channel.permissionOverwrites.edit(supportRoleId, { SendMessages: true });
     }
 
-    let targetMessage = message;
-    if (!targetMessage) {
-        const fetchedMessages = await channel.messages.fetch({ limit: 50 });
-        targetMessage = fetchedMessages.find(m => m.author.id === client.user.id && m.components.length > 0);
+    let targetMsg = message;
+    if (!targetMsg) {
+        const fetched = await channel.messages.fetch({ limit: 10 });
+        targetMsg = fetched.find(m => m.author.id === client.user.id && m.components.length > 0);
     }
 
-    if (targetMessage) {
-        const rows = targetMessage.components.map(oldRow => {
+    const unclaimEmbed = success(`Ticket **unclaimed**. Support staff can speak again.`);
+
+    if (targetMsg) {
+        const rows = targetMsg.components.map(oldRow => {
             const row = ActionRowBuilder.from(oldRow);
             row.components.forEach(c => {
                 if (c.data.custom_id === 'ticket_action_unclaim') {
-                    c.setCustomId('ticket_action_claim')
-                     .setLabel('Claim Ticket')
-                     .setStyle(ButtonStyle.Secondary)
-                     .setEmoji('🙋‍♂️');
+                    c.setCustomId('ticket_action_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Secondary).setEmoji('🙋‍♂️');
                 }
             });
             return row;
@@ -185,12 +182,13 @@ async function unclaimTicket(interaction, client) {
 
         if (interaction.isButton()) {
             await interaction.update({ components: rows });
+            await channel.send({ embeds: [unclaimEmbed] });
         } else {
-            await targetMessage.edit({ components: rows });
-            await smartReply(interaction, { embeds: [success(`Ticket **unclaimed** successfully.`)] }, true);
+            await targetMsg.edit({ components: rows });
+            await smartReply(interaction, { embeds: [unclaimEmbed] });
         }
-    } else if (!interaction.replied) {
-        await smartReply(interaction, { embeds: [success(`Ticket **unclaimed** successfully.`)] }, true);
+    } else {
+        await smartReply(interaction, { embeds: [unclaimEmbed] });
     }
 }
 
@@ -199,7 +197,7 @@ async function handleTicketActions(interaction, client) {
 
     if (customId === 'ticket_action_close') {
         const modal = new ModalBuilder().setCustomId('ticket_close_modal').setTitle('Close Ticket');
-        const reasonInput = new TextInputBuilder().setCustomId('close_reason').setLabel("Reason").setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(200);
+        const reasonInput = new TextInputBuilder().setCustomId('close_reason').setLabel("Reason").setStyle(TextInputStyle.Paragraph).setRequired(false);
         modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
         return await interaction.showModal(modal);
     }
@@ -207,9 +205,9 @@ async function handleTicketActions(interaction, client) {
     if (customId === 'ticket_close_modal') {
         const reason = interaction.fields.getTextInputValue('close_reason') || 'No reason provided';
         
-        await interaction.reply({ 
-            embeds: [success('Closing ticket and generating transcript...').setFooter({ text: 'Made by: ukirama' })],
-            flags: MessageFlags.Ephemeral 
+        // Modal responses are not deferred by commandHandler, so we use smartReply
+        await smartReply(interaction, { 
+            embeds: [new EmbedBuilder().setDescription("🔒 **Closing ticket and generating transcript...**").setColor("#FF4B4B").setFooter({ text: 'Made by: ukirama' })]
         });
 
         return await closeTicket(interaction, client, reason);
