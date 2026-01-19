@@ -9,7 +9,7 @@ module.exports = {
     async execute(client) {
         client.schedulerStarted = false;
         
-        console.log(`Ready! Logged in as ${client.user.tag}`);
+        console.log(`✅ Ready! Logged in as ${client.user.tag}`);
         
         const resumedCount = await resumePunishmentsOnStart(client);
         startScheduler(client);
@@ -19,11 +19,9 @@ module.exports = {
         const keepAliveInterval = 24 * 60 * 60 * 1000; 
         setInterval(async () => {
             try {
-                console.log("[DB KEEP-ALIVE] Pinging database to prevent sleep...");
                 await db.query('SELECT 1');
-                console.log("[DB KEEP-ALIVE] Database ping successful.");
             } catch (error) {
-                console.error("[DB KEEP-ALIVE] Failed to ping database:", error.message);
+                console.error("[DB KEEP-ALIVE] Error:", error.message);
             }
         }, keepAliveInterval);
 
@@ -33,9 +31,18 @@ module.exports = {
             });
         }, 86400000);
 
-        client.user.setPresence({
-            activities: [{ name: 'Moderating Universal Piece', type: ActivityType.Watching }],
-            status: 'online',
-        });
+        const updateStatus = () => {
+            const guild = client.guilds.cache.first();
+            const statusText = guild ? `Moderating ${guild.name}` : '';
+
+            client.user.setPresence({
+                activities: [{ name: statusText, type: ActivityType.Watching }],
+                status: 'online',
+            });
+        };
+
+        updateStatus();
+
+        setInterval(updateStatus, 3600000);
     },
 };
