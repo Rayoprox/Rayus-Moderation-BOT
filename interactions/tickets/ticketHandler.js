@@ -1,25 +1,15 @@
-const { 
-    EmbedBuilder, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle, 
-    ChannelType, 
-    PermissionsBitField,
-    MessageFlags 
-} = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, MessageFlags } = require('discord.js');
 const { error, success } = require('../../utils/embedFactory.js');
+const { smartReply } = require('../../utils/interactionHelpers.js');
 const db = require('../../utils/db.js');
 
 async function handleTicketOpen(interaction, client) {
-    if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    }
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const { customId, user, guild } = interaction;
     const panelId = customId.replace('ticket_open_', '');
-
     const res = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guild.id, panelId]);
-    if (res.rows.length === 0) return interaction.editReply({ embeds: [error('Panel not found.')] });
+    if (res.rows.length === 0) return await smartReply(interaction, { embeds: [error('Panel not found.')] });
     const panel = res.rows[0];
 
     try {
@@ -29,35 +19,29 @@ async function handleTicketOpen(interaction, client) {
             parent: panel.ticket_category_id || null,
             permissionOverwrites: [
                 { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-                { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles] },
-                { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] }
+                { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+                { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels] }
             ]
         });
 
-        if (panel.support_role_id) {
-            await ticketChannel.permissionOverwrites.edit(panel.support_role_id, { ViewChannel: true, SendMessages: true });
-        }
+        if (panel.support_role_id) await ticketChannel.permissionOverwrites.edit(panel.support_role_id, { ViewChannel: true, SendMessages: true });
 
         const welcomeEmbed = new EmbedBuilder()
-            .setTitle(`${panel.button_emoji} ${panel.title}`)
+            .setTitle(panel.title)
             .setDescription(panel.welcome_message.replace('{user}', `<@${user.id}>`))
             .setColor(0x5865F2)
             .setFooter({ text: 'Made by: ukirama' });
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('ticket_action_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒'),
-            new ButtonBuilder().setCustomId('ticket_action_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Secondary).setEmoji('🙋‍♂️')
+            new ButtonBuilder().setCustomId('ticket_action_close').setLabel('Close').setStyle(ButtonStyle.Danger).setEmoji('🔒'),
+            new ButtonBuilder().setCustomId('ticket_action_claim').setLabel('Claim').setStyle(ButtonStyle.Secondary).setEmoji('🙋‍♂️')
         );
 
         await ticketChannel.send({ content: panel.support_role_id ? `<@&${panel.support_role_id}>` : null, embeds: [welcomeEmbed], components: [row] });
-        
         await db.query(`INSERT INTO tickets (guild_id, channel_id, user_id, panel_id, status, created_at) VALUES ($1, $2, $3, $4, 'OPEN', $5)`, [guild.id, ticketChannel.id, user.id, panelId, Date.now()]);
-        
-        await interaction.editReply({ embeds: [success(`Ticket created: ${ticketChannel}`)] });
-
+        await smartReply(interaction, { embeds: [success(`Ticket opened: ${ticketChannel}`)] });
     } catch (err) {
-        console.error(err);
-        await interaction.editReply({ embeds: [error('Failed to create ticket.')] });
+        await smartReply(interaction, { embeds: [error('Failed to create ticket.')] });
     }
 }
 
