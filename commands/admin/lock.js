@@ -8,7 +8,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('lock')
         .setDescription('Locks the channel so members cannot send messages.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addChannelOption(option =>
             option.setName('channel')
                 .setDescription('The channel to lock (Defaults to current).')

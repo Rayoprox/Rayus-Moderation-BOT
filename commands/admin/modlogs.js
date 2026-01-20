@@ -7,7 +7,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('modlogs')
         .setDescription('Displays the moderation history for a user.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addUserOption(option =>
             option.setName('user')
                 .setDescription('The user whose logs you want to see.')
@@ -61,4 +61,3 @@ module.exports = {
         await interaction.editReply({ embeds: [generateEmbed(0)], components: [buttons] });
     },
 };
-

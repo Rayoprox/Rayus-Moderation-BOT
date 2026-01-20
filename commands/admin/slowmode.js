@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const ms = require('ms');
 const { success, error } = require('../../utils/embedFactory.js');
 
@@ -7,6 +7,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('slowmode')
         .setDescription('🐢 Set the slowmode for the current channel.')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addStringOption(option =>
             option.setName('duration')
                 .setDescription('Time (e.g., 5s, 10m, 6h) or "off" to disable.')

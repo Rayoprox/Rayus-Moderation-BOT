@@ -6,7 +6,8 @@ module.exports = {
     deploy: 'main',
     data: new SlashCommandBuilder()
         .setName('lockdown')
-        .setDescription('🚨 LOCKDOWN: Backs up permissions and makes configured channels private.'),
+        .setDescription('🚨 LOCKDOWN: Backs up permissions and makes configured channels private.')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
 
     async execute(interaction) {
         const { guild } = interaction;

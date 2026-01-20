@@ -3,7 +3,7 @@ const db = require('../../utils/db.js');
 const ms = require('ms');
 const { resumePunishmentsOnStart } = require('../../utils/temporary_punishment_handler.js');
 const { emojis } = require('../../utils/config.js'); 
-const { success, error } = require('../../utils/embedFactory.js'); // IMPORTAMOS LA FÁBRICA
+const { success, error } = require('../../utils/embedFactory.js');
 
 const APPEAL_SERVER_INVITE = process.env.DISCORD_APPEAL_INVITE_LINK;
 const WARN_COLOR = 0xFFD700;
@@ -15,7 +15,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('warn')
         .setDescription('Issues a warning to a user.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addUserOption(option => option.setName('user').setDescription('The user to warn.').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('The reason for the warning.').setRequired(false)),
 

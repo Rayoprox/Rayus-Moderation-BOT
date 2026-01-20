@@ -7,7 +7,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('warnings')
         .setDescription('Displays and manages the warnings for a user.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addUserOption(option =>
             option.setName('user')
                 .setDescription('The user whose logs you want to see.')

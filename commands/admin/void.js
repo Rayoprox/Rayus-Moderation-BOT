@@ -9,7 +9,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('void')
         .setDescription("Annuls (marks as void) a finished or non-timed moderation case.")
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addStringOption(option => option.setName('case_id').setDescription('The Case ID of the log to void (e.g., CASE-123456789).').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('The reason for voiding this case.').setRequired(true)),
 
@@ -25,8 +25,6 @@ module.exports = {
             return interaction.editReply({ content: `❌ Case ID \`${caseId}\` not found in the logs.`, flags: [MessageFlags.Ephemeral] });
         }
         
-        
-       
         if (log.status === 'ACTIVE' && (log.action === 'TIMEOUT' || log.action === 'BAN')) {
             return interaction.editReply({ content: `❌ This case is still an **ACTIVE** punishment. Please remove the punishment (unban/unmute) before you can void this case.`, flags: [MessageFlags.Ephemeral] });
         }

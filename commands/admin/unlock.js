@@ -8,7 +8,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('unlock')
         .setDescription('Unlocks the channel allowing members to speak.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addChannelOption(option =>
             option.setName('channel')
                 .setDescription('The channel to unlock (Defaults to current).')

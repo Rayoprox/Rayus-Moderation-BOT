@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const db = require('../../utils/db.js');
 const { emojis } = require('../../utils/config.js');
-const { success, error } = require('../../utils/embedFactory.js'); // IMPORTAMOS LA FÁBRICA
+const { success, error } = require('../../utils/embedFactory.js');
 
 const KICK_COLOR = 0xE67E22; 
 
@@ -11,7 +11,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('kick')
         .setDescription('Kicks a member from the server.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.KickMembers)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addUserOption(option => option.setName('user').setDescription('The user to kick.').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('The reason for the kick.').setRequired(false)),
 

@@ -8,7 +8,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('reason')
         .setDescription("Updates the reason for a moderation case.")
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addStringOption(option => option.setName('case_id').setDescription('The Case ID of the log to update.').setRequired(true))
         .addStringOption(option => option.setName('new_reason').setDescription('The new reason for this case.').setRequired(true)),
 

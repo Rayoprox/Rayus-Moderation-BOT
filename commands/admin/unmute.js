@@ -2,7 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, MessageFlags } =
 const db = require('../../utils/db.js');
 const { initializeTimerMap } = require('../../utils/temporary_punishment_handler.js');
 const { emojis } = require('../../utils/config.js');    
-const { success, error } = require('../../utils/embedFactory.js'); // IMPORTAMOS LA FÁBRICA
+const { success, error } = require('../../utils/embedFactory.js');
 
 const UNMUTE_COLOR = 0x2ECC71;
 
@@ -12,7 +12,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('unmute')
         .setDescription('Removes a timeout from a user.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addUserOption(option => option.setName('user').setDescription('The user to unmute.').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('The reason for the unmute.').setRequired(false)),
 

@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const db = require('../../utils/db.js');
 const { emojis } = require('../../utils/config.js');
-const { success, error } = require('../../utils/embedFactory.js'); // IMPORTAMOS LA FÁBRICA
+const { success, error } = require('../../utils/embedFactory.js');
 
 const UNBAN_COLOR = 0x2ECC71; 
 
@@ -11,7 +11,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('unban')
         .setDescription('Removes a ban from a user.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.BanMembers)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addStringOption(option => option.setName('user_id').setDescription('The ID of the user to unban.').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('The reason for the unban.').setRequired(false)),
 

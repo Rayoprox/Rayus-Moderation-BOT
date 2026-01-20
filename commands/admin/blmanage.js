@@ -8,7 +8,8 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('blmanage')
         .setDescription('Manages the appeal blacklist for the server.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.BanMembers)
+        // CAMBIO: Visible para ManageMessages
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addSubcommand(subcommand =>
             subcommand
                 .setName('add')
@@ -53,14 +54,14 @@ module.exports = {
                     });
                 } catch (error) {
                     console.error('[ERROR] Failed to add user to blacklist:', error);
-                    return interaction.editReply({ content: '❌ An error occurred while adding the user to the blacklist.', flags: [MessageFlags.Ephemeral] }); // Cambio aquí
+                    return interaction.editReply({ content: '❌ An error occurred while adding the user to the blacklist.', flags: [MessageFlags.Ephemeral] }); 
                 }
 
             } else if (subcommand === 'remove') {
                 const result = await db.query("DELETE FROM appeal_blacklist WHERE userid = $1 AND guildid = $2 RETURNING userid", [userId, guildId]);
                 
                 if (result.rowCount === 0) {
-                    return interaction.editReply({ content: `❌ **${userTag}** is not currently in the appeal blacklist.`, flags: [MessageFlags.Ephemeral] }); // Cambio aquí
+                    return interaction.editReply({ content: `❌ **${userTag}** is not currently in the appeal blacklist.`, flags: [MessageFlags.Ephemeral] }); 
                 }
 
                 return interaction.editReply({ 
@@ -78,7 +79,7 @@ module.exports = {
             const blacklist = blacklistResult.rows;
 
             if (blacklist.length === 0) {
-                return interaction.editReply({ content: 'The appeal blacklist is currently empty.', flags: [MessageFlags.Ephemeral] }); // Cambio aquí
+                return interaction.editReply({ content: 'The appeal blacklist is currently empty.', flags: [MessageFlags.Ephemeral] }); 
             }
 
            
@@ -93,7 +94,7 @@ module.exports = {
                 .setDescription(userList.join('\n'))
                 .setTimestamp();
 
-            return interaction.editReply({ embeds: [embed], flags: [MessageFlags.Ephemeral] }); // Cambio aquí
+            return interaction.editReply({ embeds: [embed], flags: [MessageFlags.Ephemeral] }); 
         }
     },
 };

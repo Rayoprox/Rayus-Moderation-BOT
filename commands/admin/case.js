@@ -8,7 +8,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('case')
         .setDescription('Displays details about a specific moderation case ID.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers) 
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages) 
         .addStringOption(option =>
             option.setName('case_id')
                 .setDescription('The Case ID of the log to view (e.g., CASE-12345).')

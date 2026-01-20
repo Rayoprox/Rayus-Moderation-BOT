@@ -11,7 +11,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('softban')
         .setDescription('Bans a member and immediately unbans them to clear their recent messages.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.BanMembers) 
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages) 
         .addUserOption(option => option.setName('user').setDescription('The user to softban (mention or ID).').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('The reason for the softban and message deletion.').setRequired(true))
         .addStringOption(option => option.setName('delete_messages').setDescription('Select timeframe of messages to delete.')

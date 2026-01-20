@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const db = require('../../utils/db.js');
 const { success, error } = require('../../utils/embedFactory.js');
 
@@ -6,7 +6,8 @@ module.exports = {
     deploy: 'main',
     data: new SlashCommandBuilder()
         .setName('unlockdown')
-        .setDescription('🔓 UNLOCKDOWN: Restores permissions from the last lockdown.'),
+        .setDescription('🔓 UNLOCKDOWN: Restores permissions from the last lockdown.')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
 
     async execute(interaction) {
         const { guild } = interaction;
@@ -24,7 +25,6 @@ module.exports = {
 
             try {
                 const savedOverwrites = JSON.parse(row.permissions_json);
-                
                 
                 await channel.permissionOverwrites.set(savedOverwrites);
                 unlockedCount++;
