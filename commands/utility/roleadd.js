@@ -43,18 +43,10 @@ module.exports = {
             return interaction.editReply({ content: `${emojis.error} An unexpected error occurred while trying to add the role.`, flags: [MessageFlags.Ephemeral] });
         }
 
-        const publicEmbed = new EmbedBuilder()
+        const simpleEmbed = new EmbedBuilder()
             .setColor(SUCCESS_COLOR)
-            .setTitle(`${emojis.success} Role Assignment Successful`)
-            .setDescription(`The **${role.name}** role was successfully added.`)
-            .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 64 }))
-            .addFields(
-                { name: `${emojis.user} User`, value: `<@${targetUser.id}> (\`${targetUser.tag}\`)`, inline: true },
-                { name: `${emojis.role} Role`, value: `${role.name}`, inline: true },
-                { name: `${emojis.moderator} Moderator`, value: interaction.user.tag, inline: true }
-            )
-            .setTimestamp();
+            .setDescription(`${emojis.success} **Role Added**\nRole **${role.name}** has been added to ${targetUser.tag}.`);
 
-        await interaction.editReply({ embeds: [publicEmbed] });
+        await interaction.editReply({ embeds: [simpleEmbed] });
     },
 };
