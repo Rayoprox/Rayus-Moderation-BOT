@@ -95,15 +95,15 @@ async function claimTicket(interaction, client, db) {
     const isSupport = supportRoleId && member.roles.cache.has(supportRoleId);
 
     if (ticket.user_id === user.id && !isSupport && !isAdmin) {
-        return await smartReply(interaction, { embeds: [error('⛔ You cannot claim your own ticket.')] }, true);
+        return await smartReply(interaction, { embeds: [error('You cannot claim your own ticket.')] }, true);
     }
 
     if (!isSupport && !isAdmin) {
-        return await smartReply(interaction, { embeds: [error('⛔ Only Support Staff can claim tickets.')] }, true);
+        return await smartReply(interaction, { embeds: [error(' Only Support Staff can claim tickets.')] }, true);
     }
 
     if (ticket.participants && ticket.participants !== user.id && !isAdmin) {
-        return await smartReply(interaction, { embeds: [error(`⛔ This ticket is already claimed by <@${ticket.participants}>.`)] }, true);
+        return await smartReply(interaction, { embeds: [error(` This ticket is already claimed by <@${ticket.participants}>.`)] }, true);
     }
 
 
@@ -154,7 +154,7 @@ async function unclaimTicket(interaction, client, db) {
     const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
 
     if (ticket.participants !== user.id && !isAdmin) {
-        return await smartReply(interaction, { embeds: [error('⛔ Only the staff member who claimed this ticket can unclaim it.')] }, true);
+        return await smartReply(interaction, { embeds: [error('Only the staff member who claimed this ticket can unclaim it.')] }, true);
     }
 
     const panelRes = await db.query('SELECT support_role_id FROM ticket_panels WHERE panel_id = $1', [ticket.panel_id]);
@@ -232,20 +232,21 @@ async function handleTicketActions(interaction, client) {
     }
 
     if (customId === 'ticket_action_claim') {
-        if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+     
         return await claimTicket(interaction, client, db);
     }
     
     if (customId === 'ticket_action_unclaim') {
-        if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+        
         
         const ticketRes = await db.query('SELECT participants FROM tickets WHERE channel_id = $1', [channel.id]);
         const claimerId = ticketRes.rows[0]?.participants;
         const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
 
         if (claimerId && claimerId !== user.id && !isAdmin) {
-             return await smartReply(interaction, { embeds: [error('⛔ Ticket is claimed by another staff member.')] }, true);
+             return await smartReply(interaction, { embeds: [error(' Ticket is claimed by another staff member.')] }, true);
         }
+        
         return await unclaimTicket(interaction, client, db);
     }
 }

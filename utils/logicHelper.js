@@ -73,11 +73,15 @@ async function validateCommandPermissions(client, guild, member, user, commandNa
 
 async function sendCommandLog(interaction, db, isAdmin) {
     try {
+        if (!interaction.guild) return; 
         const cmdLogResult = await db.query('SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = $2', [interaction.guild.id, 'cmdlog']);
         if (!cmdLogResult.rows[0]?.channel_id) return;
 
         const channel = interaction.guild.channels.cache.get(cmdLogResult.rows[0].channel_id);
         if (!channel) return;
+
+        const channelId = interaction.channelId || interaction.channel?.id || 'Unknown';
+        const channelDisplay = interaction.channel ? interaction.channel.toString() : `<#${channelId}>`;
 
         const logEmbed = new EmbedBuilder()
             .setColor(isAdmin ? 0x2B2D31 : 0x3498DB) 
@@ -85,7 +89,7 @@ async function sendCommandLog(interaction, db, isAdmin) {
             .setDescription(`**Command:** \`${interaction.toString()}\``)
             .addFields(
                 { name: '👤 User', value: `${interaction.user} (\`${interaction.user.id}\`)`, inline: true },
-                { name: '📺 Channel', value: `${interaction.channel} (\`${interaction.channel.id}\`)`, inline: true }
+                { name: '📺 Channel', value: `${channelDisplay} (\`${channelId}\`)`, inline: true }
             )
             .setTimestamp();
 
