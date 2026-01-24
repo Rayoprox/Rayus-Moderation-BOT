@@ -4,7 +4,7 @@ const ticketSetup = require('../interactions/tickets/ticketSetup');
 const automodSystem = require('../interactions/admin/automod');
 const appealSystem = require('../interactions/features/appeals');
 const logSystem = require('../interactions/moderation/logs');
-const { error } = require('../utils/embedFactory.js'); // Asegúrate de importar esto
+const { error } = require('../utils/embedFactory.js'); 
 
 const { handleTicketOpen } = require('../interactions/tickets/ticketHandler');
 const { handleTicketActions } = require('../interactions/tickets/ticketActions'); 
@@ -12,7 +12,6 @@ const { handleTicketActions } = require('../interactions/tickets/ticketActions')
 module.exports = async (interaction) => {
     const { customId, client, user, message } = interaction;
 
- 
     const PUBLIC_BUTTONS = ['ticket_open_', 'ticket_claim', 'ticket_close', 'start_appeal_process'];
     const isPublic = PUBLIC_BUTTONS.some(id => customId.startsWith(id));
 
@@ -22,12 +21,10 @@ module.exports = async (interaction) => {
         if (message.interaction) {
             ownerId = message.interaction.user.id;
         } 
-       
         else if (message.mentions && message.mentions.repliedUser) {
             ownerId = message.mentions.repliedUser.id;
         }
 
-      
         if (ownerId && user.id !== ownerId) {
             return interaction.reply({ 
                 content: '⛔ **You cannot use this button.** Run the command yourself.', 
@@ -35,7 +32,6 @@ module.exports = async (interaction) => {
             });
         }
     }
- 
 
     try {
         if (customId.startsWith('univ_')) {
@@ -74,9 +70,18 @@ module.exports = async (interaction) => {
             return;
         }
     } catch (err) {
+       
+        if (err.code === 10062 || err.message.includes('Unknown interaction')) {
+            console.warn(`[TimeOut Warning] La interacción ${customId} expiró antes de responder.`);
+            return;
+        }
+
         console.error("Interaction Error:", err);
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
+            }
+        } catch (replyErr) {
         }
     }
 };

@@ -3,8 +3,8 @@ const {
     TextInputBuilder, TextInputStyle, PermissionsBitField 
 } = require('discord.js');
 const discordTranscripts = require('discord-html-transcripts');
-const { error, success } = require('../../utils/embedFactory.js');
-const { smartReply } = require('../../utils/interactionHelpers.js');
+const { error, success } = require('../../utils/embedFactory.js'); //
+const { smartReply } = require('../../utils/interactionHelpers.js'); //
 
 
 async function findSystemMessage(channel, client) {
@@ -122,16 +122,20 @@ async function claimTicket(interaction, client, db) {
             newRow.components.forEach(c => {
                 if (c.data.custom_id === 'ticket_action_claim') {
                     c.setCustomId('ticket_action_unclaim')
-                     .setLabel('Unclaim Ticket')
-                     .setStyle(ButtonStyle.Danger) // Rojo
-                     .setEmoji('🔓');
+                      .setLabel('Unclaim Ticket')
+                      .setStyle(ButtonStyle.Danger) 
+                      .setEmoji('🔓');
                 }
             });
             return newRow;
         });
         
-        if (interaction.isButton && interaction.message) await interaction.update({ components: rows });
-        else await targetMsg.edit({ components: rows });
+       
+        if (interaction.isButton && interaction.message && !interaction.deferred && !interaction.replied) {
+            await interaction.update({ components: rows });
+        } else {
+            await targetMsg.edit({ components: rows });
+        }
     }
 
     if (!interaction.isButton || !interaction.message) {
@@ -171,16 +175,19 @@ async function unclaimTicket(interaction, client, db) {
             newRow.components.forEach(c => {
                 if (c.data.custom_id === 'ticket_action_unclaim') {
                     c.setCustomId('ticket_action_claim')
-                     .setLabel('Claim Ticket')
-                     .setStyle(ButtonStyle.Secondary) // Gris
-                     .setEmoji('🙋‍♂️');
+                      .setLabel('Claim Ticket')
+                      .setStyle(ButtonStyle.Secondary) 
+                      .setEmoji('🙋‍♂️');
                 }
             });
             return newRow;
         });
 
-        if (interaction.isButton && interaction.message) await interaction.update({ components: rows });
-        else await targetMsg.edit({ components: rows });
+        if (interaction.isButton && interaction.message && !interaction.deferred && !interaction.replied) {
+            await interaction.update({ components: rows });
+        } else {
+            await targetMsg.edit({ components: rows });
+        }
     }
 
     if (!interaction.isButton || !interaction.message) {
@@ -195,6 +202,7 @@ async function handleTicketActions(interaction, client) {
     const db = client.db;
 
     if (customId === 'ticket_action_close') {
+       
         const ticketRes = await db.query('SELECT user_id, panel_id FROM tickets WHERE channel_id = $1', [channel.id]);
         if (!ticketRes.rows[0]) return;
         const ticket = ticketRes.rows[0];
@@ -216,14 +224,21 @@ async function handleTicketActions(interaction, client) {
     }
 
     if (customId === 'ticket_close_modal') {
+        if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+
         const reason = interaction.fields.getTextInputValue('reason') || 'No reason provided';
         await smartReply(interaction, { embeds: [success('🔒 Closing ticket and archiving...').setFooter({ text: 'Made by: ukirama' })] });
         return await closeTicket(interaction, client, db, reason);
     }
 
-    if (customId === 'ticket_action_claim') return await claimTicket(interaction, client, db);
+    if (customId === 'ticket_action_claim') {
+        if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+        return await claimTicket(interaction, client, db);
+    }
     
     if (customId === 'ticket_action_unclaim') {
+        if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+        
         const ticketRes = await db.query('SELECT participants FROM tickets WHERE channel_id = $1', [channel.id]);
         const claimerId = ticketRes.rows[0]?.participants;
         const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);

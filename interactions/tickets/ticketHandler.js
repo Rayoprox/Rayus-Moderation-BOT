@@ -8,9 +8,25 @@ async function handleTicketOpen(interaction, client) {
 
     const { customId, user, guild } = interaction;
     const panelId = customId.replace('ticket_open_', '');
+    
     const res = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guild.id, panelId]);
     if (res.rows.length === 0) return await smartReply(interaction, { embeds: [error('Panel not found.')] });
     const panel = res.rows[0];
+
+    const ticketLimit = panel.ticket_limit || 1; 
+
+    const activeTicketsRes = await db.query(
+        "SELECT COUNT(*) FROM tickets WHERE user_id = $1 AND panel_id = $2 AND status = 'OPEN'", 
+        [user.id, panelId]
+    );
+    const openTicketsCount = parseInt(activeTicketsRes.rows[0].count);
+
+    if (openTicketsCount >= ticketLimit) {
+        return await smartReply(interaction, { 
+            embeds: [error(`⛔ **Limit Reached:** You can only have **${ticketLimit}** open ticket(s) in this panel category.\n\nPlease close your existing ticket before opening a new one.`)] 
+        }, true);
+    }
+
 
     try {
         const ticketChannel = await guild.channels.create({
@@ -38,9 +54,15 @@ async function handleTicketOpen(interaction, client) {
         );
 
         await ticketChannel.send({ content: panel.support_role_id ? `<@&${panel.support_role_id}>` : null, embeds: [welcomeEmbed], components: [row] });
-        await db.query(`INSERT INTO tickets (guild_id, channel_id, user_id, panel_id, status, created_at) VALUES ($1, $2, $3, $4, 'OPEN', $5)`, [guild.id, ticketChannel.id, user.id, panelId, Date.now()]);
+        
+        await db.query(
+            `INSERT INTO tickets (guild_id, channel_id, user_id, panel_id, status, created_at) VALUES ($1, $2, $3, $4, 'OPEN', $5)`, 
+            [guild.id, ticketChannel.id, user.id, panelId, Date.now()]
+        );
+        
         await smartReply(interaction, { embeds: [success(`Ticket opened: ${ticketChannel}`)] });
     } catch (err) {
+        console.error(err);
         await smartReply(interaction, { embeds: [error('Failed to create ticket.')] });
     }
 }
