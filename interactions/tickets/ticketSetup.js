@@ -6,6 +6,9 @@ const {
 const { safeDefer, smartReply } = require('../../utils/interactionHelpers.js');
 const { success, error } = require('../../utils/embedFactory.js');
 
+
+const multiPanelSelectionCache = new Map();
+
 async function showPanelDashboard(interaction, db, guildId, panelId) {
     const res = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guildId, panelId]);
     if (res.rows.length === 0) return await smartReply(interaction, { embeds: [error('Panel not found in database.')] });
@@ -121,7 +124,7 @@ async function showButtonStylePicker(interaction, panelId) {
 
 
 module.exports = async (interaction) => {
-    const { customId, guild, client, values, fields } = interaction;
+    const { customId, guild, client, values, fields, user } = interaction;
     const db = client.db;
     const guildId = guild.id;
 
@@ -130,14 +133,112 @@ module.exports = async (interaction) => {
         const panels = await db.query('SELECT panel_id, title FROM ticket_panels WHERE guild_id = $1 ORDER BY id ASC', [guildId]);
         const panelList = panels.rows.length > 0 ? panels.rows.map(p => `• **${p.title}** (ID: \`${p.panel_id}\`)`).join('\n') : '_No panels created yet._';
         const embed = new EmbedBuilder().setTitle('🎫 Ticket System').setDescription(`Manage your panels.\n\n**Current Panels:**\n${panelList}`).setColor('#5865F2').setFooter({ text: 'Made by: ukirama' });
+        
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('ticket_panel_create').setLabel('Create').setStyle(ButtonStyle.Success).setEmoji('➕'),
+            new ButtonBuilder().setCustomId('ticket_panel_create').setLabel('Create Panel').setStyle(ButtonStyle.Success).setEmoji('➕'),
+            new ButtonBuilder().setCustomId('ticket_multipanel_create').setLabel('Create Multipanel').setStyle(ButtonStyle.Secondary).setEmoji('📑').setDisabled(panels.rows.length < 2), // Solo activado si hay 2 o mas
             new ButtonBuilder().setCustomId('tkt_edit_list').setLabel('Edit').setStyle(ButtonStyle.Primary).setEmoji('✏️').setDisabled(panels.rows.length === 0),
             new ButtonBuilder().setCustomId('tkt_delete_list').setLabel('Delete').setStyle(ButtonStyle.Danger).setEmoji('🗑️').setDisabled(panels.rows.length === 0),
             new ButtonBuilder().setCustomId('setup_home').setLabel('Back').setStyle(ButtonStyle.Secondary)
         );
         return await smartReply(interaction, { content: null, embeds: [embed], components: [row] });
     }
+
+
+    if (customId === 'ticket_multipanel_create') {
+        if (!await safeDefer(interaction, true)) return;
+        const panels = await db.query('SELECT panel_id, title FROM ticket_panels WHERE guild_id = $1 ORDER BY id ASC', [guildId]);
+        
+        if (panels.rows.length < 2) {
+             return await smartReply(interaction, { embeds: [error('You need at least 2 panels to create a Multipanel.')] });
+        }
+
+        const menu = new StringSelectMenuBuilder()
+            .setCustomId('tkt_multi_select_panels')
+            .setPlaceholder('Select panels to include (Max 10)')
+            .setMinValues(2)
+            .setMaxValues(Math.min(panels.rows.length, 10)) 
+            .addOptions(panels.rows.map(p => ({ label: p.title, value: p.panel_id, emoji: '🎫' })));
+
+        const embed = new EmbedBuilder()
+            .setTitle('📑 Create Multipanel')
+            .setDescription('Select the individual panels you want to combine into one message.\nWait until you select them to choose the destination channel.')
+            .setColor('#5865F2');
+
+        const row = new ActionRowBuilder().addComponents(menu);
+        const rowBack = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_tickets_menu').setLabel('Cancel').setStyle(ButtonStyle.Secondary));
+
+        return await smartReply(interaction, { content: null, embeds: [embed], components: [row, rowBack] });
+    }
+
+    if (customId === 'tkt_multi_select_panels') {
+        if (!await safeDefer(interaction, true)) return;
+        
+        multiPanelSelectionCache.set(user.id, values);
+
+        const channelMenu = new ChannelSelectMenuBuilder()
+            .setCustomId('tkt_multi_deploy_final')
+            .setPlaceholder('Select destination channel...')
+            .addChannelTypes(ChannelType.GuildText);
+
+        const embed = new EmbedBuilder()
+            .setTitle('📑 Create Multipanel')
+            .setDescription(`**${values.length} Panels Selected.**\nNow select the channel where you want to send the Multipanel.`)
+            .setColor('#2ECC71');
+
+        const row = new ActionRowBuilder().addComponents(channelMenu);
+        const rowBack = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup_tickets_menu').setLabel('Cancel').setStyle(ButtonStyle.Secondary));
+
+        return await smartReply(interaction, { content: null, embeds: [embed], components: [row, rowBack] });
+    }
+
+    if (interaction.isChannelSelectMenu() && customId === 'tkt_multi_deploy_final') {
+        if (!await safeDefer(interaction, true)) return;
+
+        const selectedPanels = multiPanelSelectionCache.get(user.id);
+        if (!selectedPanels) return await smartReply(interaction, { embeds: [error('Session expired or invalid selection. Please try again.')] });
+
+        const res = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = ANY($2)', [guildId, selectedPanels]);
+        
+        const orderedPanels = selectedPanels.map(id => res.rows.find(row => row.panel_id === id)).filter(Boolean);
+
+        const targetChannel = guild.channels.cache.get(values[0]);
+        if (!targetChannel) return await smartReply(interaction, { embeds: [error('Invalid channel.')] });
+
+        const embedsArray = orderedPanels.map(p => 
+            new EmbedBuilder()
+                .setTitle(p.title)
+                .setDescription(p.description)
+                .setColor(p.panel_color || '#5865F2')
+        );
+        embedsArray[embedsArray.length - 1].setFooter({ text: 'Made by: ukirama' });
+
+        const buttonsArray = orderedPanels.map(p => 
+            new ButtonBuilder()
+                .setCustomId(`ticket_open_${p.panel_id}`)
+                .setLabel(p.button_label)
+                .setStyle(ButtonStyle[p.button_style] || ButtonStyle.Primary)
+                .setEmoji(p.button_emoji)
+        );
+
+     
+        const componentRows = [];
+        for (let i = 0; i < buttonsArray.length; i += 5) {
+            const row = new ActionRowBuilder().addComponents(buttonsArray.slice(i, i + 5));
+            componentRows.push(row);
+        }
+
+        try {
+            await targetChannel.send({ embeds: embedsArray, components: componentRows });
+            multiPanelSelectionCache.delete(user.id); 
+            return await smartReply(interaction, { content: null, embeds: [success(`**Multipanel** sent successfully to <#${targetChannel.id}> with **${orderedPanels.length}** panels.`)] });
+        } catch (err) {
+            console.error(err);
+            return await smartReply(interaction, { embeds: [error('Failed to send Multipanel. Check my permissions in that channel.')] });
+        }
+    }
+
+   
 
     if (customId === 'tkt_edit_list' || customId === 'tkt_delete_list') {
         if (!await safeDefer(interaction, true)) return;

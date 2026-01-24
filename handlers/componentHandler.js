@@ -42,7 +42,7 @@ module.exports = async (interaction) => {
             return await automodSystem(interaction);
         }
         
-        if (customId === 'setup_tickets_menu' || customId.startsWith('ticket_panel_') || customId.startsWith('tkt_')) {
+        if (customId === 'setup_tickets_menu' || customId.startsWith('ticket_panel_') || customId.startsWith('ticket_multipanel_') || customId.startsWith('tkt_')) {
             return await ticketSetup(interaction);
         }
 
