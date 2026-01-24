@@ -45,7 +45,7 @@ async function resolveArgument(guild, type, content) {
 }
 
 class PrefixInteraction {
-    constructor(message, commandName, resolvedOptions) {
+    constructor(message, commandName, resolvedOptions, subcommand = null) {
         this.message = message;
         this.user = message.author;
         this.member = message.member;
@@ -74,7 +74,7 @@ class PrefixInteraction {
             getInteger: (name) => this._getOption(name),
             getBoolean: (name) => this._getOption(name),
             getNumber: (name) => this._getOption(name),
-            getSubcommand: () => null
+            getSubcommand: () => subcommand
         };
     }
 

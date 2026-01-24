@@ -47,7 +47,30 @@ module.exports = {
         }
 
         const resolvedOptions = {};
-        const definedOptions = command.data.options || [];
+        
+       
+        let definedOptions = command.data.options || [];
+        let activeSubcommand = null;
+
+      
+        const hasSubcommands = definedOptions.some(opt => opt.constructor.name === 'SlashCommandSubcommandBuilder' || opt.type === 1);
+
+        if (hasSubcommands) {
+            const potentialSubName = args[0]?.toLowerCase();
+            const subOption = definedOptions.find(opt => opt.name === potentialSubName && (opt.constructor.name === 'SlashCommandSubcommandBuilder' || opt.type === 1));
+
+            if (subOption) {
+                activeSubcommand = subOption.name;
+                args.shift(); 
+                definedOptions = subOption.options || []; 
+            } else {
+                if (args.length > 0) {
+                     return message.reply({ embeds: [error(`Invalid subcommand. Available: ${definedOptions.map(o => o.name).join(', ')}`)] });
+                }
+               
+            }
+        }
+
         
         let argIndex = 0;
 
@@ -63,7 +86,7 @@ module.exports = {
 
             if (optionDef.name === 'duration') {
                 const isTimeFormat = /^(\d+)(s|m|h|d|w|y|mo)?$/i.test(rawArg);
-                const isOff = rawArg.toLowerCase() === 'off';
+                const isOff = rawArg.toLowerCase() === 'off' || rawArg === '0';
                 
                 if (isTimeFormat || isOff) {
                     resolvedOptions[optionDef.name] = rawArg;
@@ -99,7 +122,7 @@ module.exports = {
         }
 
         try {
-            const interactionShim = new PrefixInteraction(message, commandName, resolvedOptions);
+            const interactionShim = new PrefixInteraction(message, commandName, resolvedOptions, activeSubcommand);
             await command.execute(interactionShim);
             
             await sendCommandLog(interactionShim, db, result.isAdmin).catch(() => {});
