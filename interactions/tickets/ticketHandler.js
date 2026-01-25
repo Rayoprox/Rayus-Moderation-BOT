@@ -37,7 +37,15 @@ async function handleTicketOpen(interaction, client) {
             parent: panel.ticket_category_id || null,
             permissionOverwrites: [
                 { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-                { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+                { 
+                    id: user.id, 
+                    allow: [
+                        PermissionsBitField.Flags.ViewChannel, 
+                        PermissionsBitField.Flags.SendMessages,
+                        PermissionsBitField.Flags.AttachFiles, 
+                        PermissionsBitField.Flags.EmbedLinks  
+                    ] 
+                },
                 { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels] }
             ]
         });
