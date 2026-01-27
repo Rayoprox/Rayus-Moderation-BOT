@@ -15,11 +15,15 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
 
     async execute(interaction) {
-       
-        await interaction.deferReply({ ephemeral: true });
         
        
+        if (!interaction.deferred && !interaction.replied) {
+            await interaction.deferReply({ ephemeral: true });
+        }
+     
+        
         if (!DEVELOPER_IDS.includes(interaction.user.id)) {
+           
             return interaction.editReply({ embeds: [error('Access Denied: This command is restricted to the bot developer.')] });
         }
 
@@ -37,7 +41,11 @@ module.exports = {
             }
         } catch (err) {
             console.error('Error in logger command:', err);
-            await interaction.editReply({ embeds: [error('An unexpected error occurred.')] });
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({ embeds: [error('An unexpected error occurred.')] });
+            } else {
+                await interaction.reply({ content: 'An unexpected error occurred.', ephemeral: true });
+            }
         }
     },
 };
