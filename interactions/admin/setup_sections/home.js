@@ -26,6 +26,7 @@ module.exports = {
 
         const row2 = new ActionRowBuilder().addComponents(
              new ButtonBuilder().setCustomId('setup_prefix').setLabel('Custom Prefix').setStyle(ButtonStyle.Secondary).setEmoji('⌨️'),
+             new ButtonBuilder().setCustomId('setup_cc_menu').setLabel('Custom Commands').setStyle(ButtonStyle.Secondary).setEmoji('⚡'),
              new ButtonBuilder().setCustomId('delete_all_data').setLabel('Reset Data').setStyle(ButtonStyle.Secondary).setEmoji('🗑️')
         );
 

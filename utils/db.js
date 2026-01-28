@@ -10,7 +10,6 @@ pool.on('error', (err, client) => {
 });
 
 const db = {
-    
     query: async (text, params = [], silent = false) => {
         try {
             return await pool.query(text, params);
@@ -23,7 +22,6 @@ const db = {
     },
 
     ensureTables: async () => {
-   
         await db.query(`CREATE TABLE IF NOT EXISTS global_settings (key TEXT PRIMARY KEY, value TEXT);`);
         
         await db.query(`
@@ -110,7 +108,19 @@ const db = {
             );
         `);
 
-   
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS custom_commands (
+                id SERIAL PRIMARY KEY,
+                guildid TEXT NOT NULL,
+                name TEXT NOT NULL,
+                response_json TEXT NOT NULL,
+                allowed_roles TEXT, 
+                created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
+                UNIQUE (guildid, name)
+            );
+        `);
+
+      
         try { await db.query(`ALTER TABLE modlogs RENAME COLUMN modid TO moderatorid`, [], true); } catch (e) {}
         try { await db.query(`ALTER TABLE modlogs ADD COLUMN moderatorid TEXT`, [], true); } catch (e) {}
         try { await db.query(`ALTER TABLE modlogs ADD COLUMN dmstatus TEXT`, [], true); } catch (e) {}
@@ -131,6 +141,9 @@ const db = {
         try { await db.query(`ALTER TABLE ticket_panels ADD COLUMN button_emoji TEXT DEFAULT '📩'`, [], true); } catch (e) {}
         try { await db.query(`ALTER TABLE ticket_panels ADD COLUMN button_label TEXT DEFAULT 'Open Ticket'`, [], true); } catch (e) {}
         
+       
+        try { await db.query(`ALTER TABLE custom_commands ADD COLUMN allowed_roles TEXT`, [], true); } catch (e) {}
+
         console.log('✅ PostgreSQL Database Integrity Check Completed.');
     }
 };

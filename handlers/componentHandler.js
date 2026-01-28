@@ -4,6 +4,7 @@ const ticketSetup = require('../interactions/tickets/ticketSetup');
 const automodSystem = require('../interactions/admin/automod');
 const appealSystem = require('../interactions/features/appeals');
 const logSystem = require('../interactions/moderation/logs');
+const customCommands = require('../interactions/admin/setup_sections/custom_commands.js');
 const { error } = require('../utils/embedFactory.js'); 
 
 const { handleTicketOpen } = require('../interactions/tickets/ticketHandler');
@@ -45,6 +46,14 @@ module.exports = async (interaction) => {
         if (customId === 'setup_tickets_menu' || customId.startsWith('ticket_panel_') || customId.startsWith('ticket_multipanel_') || customId.startsWith('tkt_')) {
             return await ticketSetup(interaction);
         }
+
+        if (customId.startsWith('setup_cc_') || customId.startsWith('modal_cc_') || customId.startsWith('select_cc_')) {
+            if (interaction.isModalSubmit()) {
+                return await customCommands.handleModal(interaction);
+            }
+            return await customCommands.execute(interaction);
+        }
+
 
         const isSetup = customId.startsWith('setup_');
         const isSelect = customId.startsWith('select_');
