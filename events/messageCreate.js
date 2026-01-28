@@ -40,7 +40,6 @@ module.exports = {
         const commandName = args.shift().toLowerCase();
         const command = message.client.commands.get(commandName);
 
-      
         if (!command) {
             const customRes = await db.query('SELECT response_json, allowed_roles FROM custom_commands WHERE guildid = $1 AND name = $2', [guild.id, commandName]);
             
@@ -48,18 +47,18 @@ module.exports = {
                 const row = customRes.rows[0];
                 const allowedRoles = row.allowed_roles ? JSON.parse(row.allowed_roles) : [];
 
-               
                 const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
                 
                 if (allowedRoles.length === 0) {
-                   
-                    if (!isAdmin) return;
+                    if (!isAdmin) return; 
                 } else {
                     const hasRole = member.roles.cache.hasAny(...allowedRoles);
-                    if (!hasRole && !isAdmin) return; 
+                    if (!hasRole && !isAdmin) return;
                 }
 
                 try {
+                    await message.delete().catch(() => {});
+
                     const responseData = JSON.parse(row.response_json);
                     return message.channel.send(responseData);
                 } catch (err) {
@@ -68,7 +67,6 @@ module.exports = {
             }
             return;
         }
-      
 
         const result = await validateCommandPermissions(
             message.client, 
