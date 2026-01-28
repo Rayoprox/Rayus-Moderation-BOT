@@ -1,9 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 
-
 async function resolveArgument(guild, type, content) {
     if (!content) return null;
-
 
     switch (type) {
         case 6: 
@@ -21,9 +19,44 @@ async function resolveArgument(guild, type, content) {
             return null;
         
         case 8: 
+          
             const roleMatch = content.match(/^<@&(\d+)>$/) || content.match(/^(\d{17,19})$/);
             if (roleMatch) return guild.roles.cache.get(roleMatch[1]) || null;
-            return null;
+
+           
+            const search = content.toLowerCase();
+            const rolesCache = guild.roles.cache;
+
+           
+            const exactMatch = rolesCache.find(r => r.name.toLowerCase() === search);
+            if (exactMatch) return exactMatch;
+
+            
+            if (search.length < 2) return null; 
+
+            
+            const matches = rolesCache.filter(r => 
+                r.name.toLowerCase().includes(search) && r.name !== '@everyone'
+            );
+
+            if (!matches.size) return null;
+
+           
+            const sortedMatches = matches.sort((roleA, roleB) => {
+                const nameA = roleA.name.toLowerCase();
+                const nameB = roleB.name.toLowerCase();
+                const startsA = nameA.startsWith(search);
+                const startsB = nameB.startsWith(search);
+
+                
+                if (startsA && !startsB) return -1;
+                if (!startsA && startsB) return 1;
+
+                
+                return nameA.length - nameB.length;
+            });
+
+            return sortedMatches.first();
 
         case 4:
             const intVal = parseInt(content);
@@ -33,12 +66,12 @@ async function resolveArgument(guild, type, content) {
             const numVal = parseFloat(content);
             return isNaN(numVal) ? null : numVal;
             
-        case 5:
+        case 5: 
             const lower = content.toLowerCase();
             return (lower === 'true' || lower === 'yes' || lower === 'si' || lower === 'on' || lower === '1') ? true : 
                    (lower === 'false' || lower === 'no' || lower === 'off' || lower === '0') ? false : null;
 
-        case 3:
+        case 3: 
         default:
             return content;
     }
