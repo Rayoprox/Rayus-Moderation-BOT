@@ -2,12 +2,11 @@ require('dotenv').config();
 
 console.log(`--- BOT STARTING UP at ${new Date().toISOString()} ---`);
 
-const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const db = require('./utils/db.js'); 
 const { startScheduler, resumePunishmentsOnStart } = require('./utils/temporary_punishment_handler.js'); 
-//const http = require('http');
 
 const client = new Client({ 
     intents: [
@@ -23,6 +22,7 @@ const client = new Client({
 client.commands = new Collection();
 client.db = db; 
 
+// Cargador de comandos
 const foldersPath = path.join(__dirname, 'commands');
 const commandFolders = fs.readdirSync(foldersPath);
 
@@ -40,7 +40,7 @@ for (const folder of commandFolders) {
     }
 }
 
-
+// Cargador de eventos
 const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
 
@@ -54,46 +54,42 @@ for (const file of eventFiles) {
     }
 }
 
-
+// Inicialización asíncrona
 (async () => {
     try {
+        // Asegurar tablas en la base de datos
         await db.ensureTables();
         console.log('✅ All tables ensured in PostgreSQL.');
         
+        // Login en Discord
         await client.login(process.env.DISCORD_TOKEN);
         
+        // Iniciar Dashboard Web
         const webApp = require('./web.js');
         
+        // Pasar el cliente del bot a la web para que tenga acceso a los gremios/canales
         webApp.locals.botClient = client;
-    
 
-        const WEB_PORT = process.env.WEB_PORT || 3001;
-        webApp.listen(WEB_PORT, () => {
-            console.log(`🌐 Web dashboard running on port ${WEB_PORT}`);
+        // Iniciar el servidor web en el puerto especificado en el .env
+        const PORT = process.env.PORT || 3001; 
+        webApp.listen(PORT, () => {
+            console.log(`🌐 Web dashboard running on port ${PORT}`);
         });
+
+        // Iniciar el programador de sanciones temporales
+        startScheduler(client);
+        await resumePunishmentsOnStart(client);
 
     } catch (error) {
         console.error('❌ Failed to connect to database or login to Discord:', error);
     }
 })();
 
-const PORT = process.env.PORT || 3000; 
-
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Discord Bot is Awake and Live!');
-});
-
-server.listen(PORT, () => {
-    console.log(`HTTP Server running on port ${PORT} for 24/7 heartbeat.`);
-
-});
+// --- SISTEMA ANTI-CRASH ---
 process.on('unhandledRejection', (reason, promise) => {
-    
+    // Ignorar errores comunes de WebSocket/Discord que no afectan al bot
     if (reason?.code === 10062 || reason?.code === 40060 || reason?.code === 10008) return;
-
     console.error(' [ANTI-CRASH] Unhandled Rejection:', reason);
-    
 });
 
 process.on('uncaughtException', (err, origin) => {
