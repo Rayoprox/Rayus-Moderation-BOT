@@ -8,7 +8,9 @@ const db = require('./utils/db');
 const { SUPREME_IDS } = require('./utils/config');
 
 const app = express();
+
 app.set('trust proxy', 1);
+
 const SCOPES = ['identify', 'guilds'];
 
 function isValidEmoji(emoji) {
@@ -22,50 +24,25 @@ function isValidEmoji(emoji) {
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
-// --- DEBUG DE ESTRATEGIA ---
 passport.use(new Strategy({
     clientID: process.env.DISCORD_CLIENT_ID,
     clientSecret: process.env.CLIENT_SECRET,
     callbackURL: process.env.CALLBACK_URL,
     scope: SCOPES
 }, (accessToken, refreshToken, profile, done) => {
-    // Este log te dirá si Discord llegó a hablar con tu bot
-    console.log(`[DEBUG] Login exitoso para: ${profile.username} (${profile.id})`);
+    console.log(`[DEBUG] Discord validó a: ${profile.username} (${profile.id})`);
     process.nextTick(() => done(null, profile));
 }));
 
-// --- RUTA CALLBACK CON DEBUG ---
-app.get('/auth/discord/callback', (req, res, next) => {
-    console.log(`[DEBUG] Callback recibido. Query code: ${req.query.code ? 'SI' : 'NO'}`);
-    
-    passport.authenticate('discord', (err, user, info) => {
-        if (err) {
-            console.error('[DEBUG ERROR] Error en Passport Authenticate:', err);
-            return res.status(500).send(`Error de Autenticación: ${err.message}`);
-        }
-        if (!user) {
-            console.error('[DEBUG ERROR] No se obtuvo usuario. Info:', info);
-            return res.redirect('/auth/discord'); // Aquí es donde se suele crear el bucle
-        }
-        
-        req.logIn(user, (err) => {
-            if (err) {
-                console.error('[DEBUG ERROR] Error al crear sesión (logIn):', err);
-                return next(err);
-            }
-            console.log(`[DEBUG] Sesión creada para ${user.username}. Redirigiendo a /`);
-            return res.redirect('/');
-        });
-    })(req, res, next);
-});
 app.set('view engine', 'ejs');
 app.set('views', join(__dirname, 'views'));
 app.use(express.static(join(__dirname, 'public')));
 app.use(express.json());
+
+
 app.use(session({
-   
     name: `session_${(process.env.DISCORD_CLIENT_ID || 'default').slice(-5)}`,
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET || 'rayus_secret_master',
     resave: false,
     saveUninitialized: false,
     proxy: true, 
@@ -73,11 +50,54 @@ app.use(session({
         secure: true,   
         httpOnly: true,
         sameSite: 'lax',
-        maxAge: 1000 * 60 * 60 * 24 * 7
+        maxAge: 1000 * 60 * 60 * 24 * 7 
     }
 }));
+
+
 app.use(passport.initialize());
 app.use(passport.session());
+
+
+app.use((req, res, next) => {
+    if (req.path.includes('/auth')) return next();
+   
+    next();
+});
+
+
+app.get('/auth/discord', passport.authenticate('discord', { scope: SCOPES }));
+
+app.get('/auth/discord/callback', (req, res, next) => {
+    console.log(`[DEBUG] Callback recibido de Discord. Code: ${req.query.code ? 'OK' : 'FALTA'}`);
+    
+    passport.authenticate('discord', (err, user, info) => {
+        if (err) {
+            console.error('[DEBUG ERROR] Fallo en intercambio de token:', err);
+            return res.status(500).send(`Error de Autenticación: ${err.message}`);
+        }
+        if (!user) {
+            console.error('[DEBUG ERROR] Discord no devolvió usuario. Info:', info);
+            return res.redirect('/auth/discord');
+        }
+
+        req.logIn(user, (loginErr) => {
+            if (loginErr) {
+                console.error('[DEBUG ERROR] No se pudo guardar la sesión:', loginErr);
+                return next(loginErr);
+            }
+            console.log(`[DEBUG] Sesión guardada para ${user.username}. Entrando al panel...`);
+            return res.redirect('/guilds');
+        });
+    })(req, res, next);
+});
+
+app.get('/logout', (req, res) => {
+    req.logout(() => {
+        req.session.destroy();
+        res.redirect('/');
+    });
+});
 
 const auth = (req, res, next) => req.isAuthenticated() ? next() : res.redirect('/auth/discord');
 
@@ -129,9 +149,6 @@ const protectRoute = async (req, res, next) => {
     }
 };
 
-app.get('/auth/discord', passport.authenticate('discord', { scope: SCOPES }));
-app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
-app.get('/logout', (req, res) => req.logout(() => res.redirect('/')));
 app.get('/', auth, (req, res) => res.redirect('/guilds'));
 
 app.get('/guilds', auth, async (req, res) => {
