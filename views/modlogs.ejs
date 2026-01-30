@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mod Logs - Moderation Bot Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        nav { margin-bottom: 20px; }
+        nav a { margin-right: 15px; text-decoration: none; color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Mod Logs</h1>
+    <nav>
+        <a href="/">Dashboard</a>
+        <a href="/guilds">Guilds</a>
+        <a href="/modlogs">Mod Logs</a>
+    </nav>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Case ID</th>
+                <th>Guild ID</th>
+                <th>Action</th>
+                <th>User</th>
+                <th>Moderator</th>
+                <th>Reason</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% modlogs.forEach(log => { %>
+                <tr>
+                    <td><%= log.caseid %></td>
+                    <td><%= log.guildid %></td>
+                    <td><%= log.action %></td>
+                    <td><%= log.usertag %> (<%= log.userid %>)</td>
+                    <td><%= log.moderatortag %> (<%= log.moderatorid %>)</td>
+                    <td><%= log.reason %></td>
+                    <td><%= new Date(log.timestamp).toLocaleString() %></td>
+                </tr>
+            <% }); %>
+        </tbody>
+    </table>
+</body>
+</html>

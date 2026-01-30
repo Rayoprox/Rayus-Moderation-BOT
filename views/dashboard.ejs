@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moderation Bot Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .stat { display: inline-block; margin: 10px; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
+        nav { margin-bottom: 20px; }
+        nav a { margin-right: 15px; text-decoration: none; color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Moderation Bot Dashboard</h1>
+    <nav>
+        <a href="/">Dashboard</a>
+        <a href="/guilds">Guilds</a>
+        <a href="/modlogs">Mod Logs</a>
+    </nav>
+
+    <div class="stat">
+        <h2>Total Guilds</h2>
+        <p><%= totalGuilds %></p>
+    </div>
+    <div class="stat">
+        <h2>Total Mod Logs</h2>
+        <p><%= totalModlogs %></p>
+    </div>
+    <div class="stat">
+        <h2>Active Tickets</h2>
+        <p><%= activeTickets %></p>
+    </div>
+</body>
+</html>

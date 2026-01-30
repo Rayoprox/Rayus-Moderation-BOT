@@ -64,6 +64,13 @@ for (const file of eventFiles) {
         console.log('✅ All tables ensured in PostgreSQL.');
         
         client.login(process.env.DISCORD_TOKEN);
+        
+        // Start web dashboard
+        const webApp = require('./web.js');
+        const WEB_PORT = process.env.WEB_PORT || 3001;
+        webApp.listen(WEB_PORT, () => {
+            console.log(`🌐 Web dashboard running on port ${WEB_PORT}`);
+        });
 
     } catch (error) {
         console.error('❌ Failed to connect to database or login to Discord:', error);
