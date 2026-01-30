@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./utils/db.js'); 
 const { startScheduler, resumePunishmentsOnStart } = require('./utils/temporary_punishment_handler.js'); 
-const http = require('http');
+//const http = require('http');
 
 const client = new Client({ 
     intents: [
