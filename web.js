@@ -3,12 +3,20 @@ const session = require('express-session');
 const passport = require('passport');
 const { Strategy } = require('passport-discord');
 const { join } = require('path');
-const { EmbedBuilder, PermissionsBitField } = require('discord.js');
+const { EmbedBuilder, PermissionsBitField, ChannelType, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const db = require('./utils/db');
 const { SUPREME_IDS } = require('./utils/config');
 
 const app = express();
 const SCOPES = ['identify', 'guilds'];
+
+function isValidEmoji(emoji) {
+    if (!emoji) return false;
+    const unicodeRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/;
+    const customRegex = /<?(a)?:?(\w{2,32}):(\d{17,19})>?/;
+    const idRegex = /^\d{17,19}$/;
+    return unicodeRegex.test(emoji) || customRegex.test(emoji) || idRegex.test(emoji);
+}
 
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
@@ -35,7 +43,6 @@ app.use(passport.session());
 
 const auth = (req, res, next) => req.isAuthenticated() ? next() : res.redirect('/auth/discord');
 
-// --- MIDDLEWARE DE SEGURIDAD ---
 const protectRoute = async (req, res, next) => {
     const { botClient } = req.app.locals;
     const userId = req.user.id;
@@ -84,7 +91,6 @@ const protectRoute = async (req, res, next) => {
     }
 };
 
-// --- RUTAS WEB ---
 app.get('/auth/discord', passport.authenticate('discord', { scope: SCOPES }));
 app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
 app.get('/logout', (req, res) => req.logout(() => res.redirect('/')));
@@ -150,7 +156,6 @@ app.get('/modlogs/:guildId', auth, protectRoute, async (req, res) => {
     } catch (e) { res.status(500).send('Error'); }
 });
 
-// --- RUTA SETUP COMPLETA ---
 app.get('/manage/:guildId/setup', auth, protectRoute, async (req, res) => {
     try {
         const { botClient } = req.app.locals;
@@ -159,31 +164,26 @@ app.get('/manage/:guildId/setup', auth, protectRoute, async (req, res) => {
 
         if (!guild) return res.redirect('/guilds');
 
-        // Configuración General
         const settingsRes = await db.query('SELECT * FROM guild_settings WHERE guildid = $1', [guildId]);
         const settings = settingsRes.rows[0] || {};
 
-        // Logs
         const logsRes = await db.query('SELECT log_type, channel_id FROM log_channels WHERE guildid = $1', [guildId]);
         const logs = {};
         logsRes.rows.forEach(row => logs[row.log_type] = row.channel_id);
 
-        // Protección
         const backupsRes = await db.query('SELECT antinuke_enabled FROM guild_backups WHERE guildid = $1', [guildId]);
         const antinuke = backupsRes.rows[0]?.antinuke_enabled || false;
 
         const lockdownRes = await db.query('SELECT channel_id FROM lockdown_channels WHERE guildid = $1', [guildId]);
-        const lockdownChannels = lockdownRes.rows.map(r => r.channel_id).join(', ');
+        const lockdownChannels = lockdownRes.rows.map(r => r.channel_id);
 
-        // Automod (MAPEO CORRECTO)
         const automodRes = await db.query('SELECT * FROM automod_rules WHERE guildid = $1 ORDER BY warnings_count ASC', [guildId]);
         const automodRules = automodRes.rows.map(r => ({
-            warnings: r.warnings_count, // DB: warnings_count -> Frontend: warnings
-            action: r.action_type,      // DB: action_type -> Frontend: action
-            duration: r.action_duration // DB: action_duration -> Frontend: duration
+            warnings: r.warnings_count,
+            action: r.action_type,
+            duration: r.action_duration
         }));
         
-        // Permisos (Sin Setup Role en el override)
         const cmdPermsRes = await db.query('SELECT command_name, role_id FROM command_permissions WHERE guildid = $1', [guildId]);
         const commandOverrides = {};
         cmdPermsRes.rows.forEach(r => {
@@ -192,31 +192,48 @@ app.get('/manage/:guildId/setup', auth, protectRoute, async (req, res) => {
             commandOverrides[r.command_name].push(r.role_id);
         });
 
+        const customCmdsRes = await db.query('SELECT * FROM custom_commands WHERE guildid = $1', [guildId]);
+        const customCommands = customCmdsRes.rows;
+
+        const ticketPanelsRes = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1', [guildId]);
+        const ticketPanels = ticketPanelsRes.rows;
+
         const botCommands = botClient.commands.map(c => c.data.name).filter(n => n !== 'setup').sort();
         const guildRoles = guild.roles.cache.map(r => ({ id: r.id, name: r.name, color: r.hexColor })).sort((a,b) => b.position - a.position);
+        
+        const channels = guild.channels.cache.map(c => ({ id: c.id, name: c.name, type: c.type, parentId: c.parentId })).sort((a,b) => a.position - b.position);
+        const textChannels = channels.filter(c => c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement);
+        const categories = channels.filter(c => c.type === ChannelType.GuildCategory);
 
         res.render('setup', { 
             bot: botClient.user, user: req.user, guild, 
             settings, logs, antinuke, lockdownChannels,
-            automodRules,
-            commandOverrides,
-            botCommands,
-            guildRoles
+            automodRules, commandOverrides,
+            customCommands, ticketPanels,
+            botCommands, guildRoles, textChannels, categories
         });
     } catch (e) { console.error(e); res.status(500).send("Error loading setup"); }
 });
 
-// --- API SETUP SAVE ---
 app.post('/api/setup/:guildId', auth, protectRoute, async (req, res) => {
     const guildId = req.params.guildId;
     const { 
         prefix, staff_roles, 
         log_mod, log_cmd, log_appeal, log_nuke,
         antinuke_enabled, lockdown_channels,
-        automod_rules, command_overrides
+        automod_rules, command_overrides,
+        custom_commands, ticket_panels
     } = req.body;
 
     try {
+        if (ticket_panels && Array.isArray(ticket_panels)) {
+            for (const tp of ticket_panels) {
+                if (tp.btnEmoji && !isValidEmoji(tp.btnEmoji)) {
+                    return res.status(400).json({ error: `Invalid emoji in panel '${tp.title}': ${tp.btnEmoji}` });
+                }
+            }
+        }
+
         await db.query(`INSERT INTO guild_settings (guildid, prefix, staff_roles) VALUES ($1, $2, $3) ON CONFLICT (guildid) DO UPDATE SET prefix = $2, staff_roles = $3`, [guildId, prefix || '!', staff_roles || null]);
 
         const updateLog = async (type, chId) => {
@@ -231,12 +248,10 @@ app.post('/api/setup/:guildId', auth, protectRoute, async (req, res) => {
         await db.query(`INSERT INTO guild_backups (guildid, antinuke_enabled) VALUES ($1, $2) ON CONFLICT (guildid) DO UPDATE SET antinuke_enabled = $2`, [guildId, antinuke_enabled === 'on']);
         
         await db.query("DELETE FROM lockdown_channels WHERE guildid = $1", [guildId]);
-        if (lockdown_channels) {
-            const channels = lockdown_channels.split(',').map(c => c.trim()).filter(c => c);
-            for (const c of channels) await db.query("INSERT INTO lockdown_channels (guildid, channel_id) VALUES ($1, $2)", [guildId, c]);
+        if (lockdown_channels && Array.isArray(lockdown_channels)) {
+            for (const c of lockdown_channels) await db.query("INSERT INTO lockdown_channels (guildid, channel_id) VALUES ($1, $2)", [guildId, c]);
         }
 
-        // Automod Save
         await db.query("DELETE FROM automod_rules WHERE guildid = $1", [guildId]);
         if (automod_rules && Array.isArray(automod_rules)) {
             for (const [idx, rule] of automod_rules.entries()) {
@@ -245,7 +260,6 @@ app.post('/api/setup/:guildId', auth, protectRoute, async (req, res) => {
             }
         }
 
-        // Permissions Save
         await db.query("DELETE FROM command_permissions WHERE guildid = $1 AND command_name != 'setup'", [guildId]);
         if (command_overrides && Array.isArray(command_overrides)) {
             for (const ov of command_overrides) {
@@ -255,8 +269,102 @@ app.post('/api/setup/:guildId', auth, protectRoute, async (req, res) => {
             }
         }
 
+        await db.query("DELETE FROM custom_commands WHERE guildid = $1", [guildId]);
+        if (custom_commands && Array.isArray(custom_commands)) {
+            for (const cc of custom_commands) {
+                await db.query(`INSERT INTO custom_commands (guildid, name, response_json, allowed_roles) VALUES ($1, $2, $3, $4)`, 
+                    [guildId, cc.name, cc.response, cc.roles.join(',')]);
+            }
+        }
+
+        await db.query("DELETE FROM ticket_panels WHERE guild_id = $1", [guildId]);
+        if (ticket_panels && Array.isArray(ticket_panels)) {
+            for (const tp of ticket_panels) {
+                await db.query(`
+                    INSERT INTO ticket_panels (guild_id, panel_id, title, description, button_label, button_style, button_emoji, support_role_id, blacklist_role_id, ticket_category_id, log_channel_id, welcome_message, panel_color, welcome_color, ticket_limit)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                `, [guildId, tp.id, tp.title, tp.description, tp.btnLabel, tp.btnStyle, tp.btnEmoji, tp.supportRole, tp.blacklistRole, tp.category, tp.logChannel, tp.welcomeMsg, tp.panelColor, tp.welcomeColor, tp.ticketLimit]);
+            }
+        }
+
         res.json({ success: true });
     } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/tickets/post-panel', auth, protectRoute, async (req, res) => {
+    const { guildId, panelId, channelId } = req.body;
+    const { botClient } = req.app.locals;
+    
+    try {
+        const guild = botClient.guilds.cache.get(guildId);
+        const channel = guild.channels.cache.get(channelId);
+        if (!channel) throw new Error("Channel not found");
+
+        const resDB = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = $2', [guildId, panelId]);
+        if (resDB.rows.length === 0) throw new Error("Panel not saved. Save changes first.");
+        const p = resDB.rows[0];
+
+        const embed = new EmbedBuilder()
+            .setTitle(p.title)
+            .setDescription(p.description)
+            .setColor(p.panel_color || '#5865F2')
+            .setFooter({ text: 'Made by: ukirama' });
+
+        const btn = new ButtonBuilder()
+            .setCustomId(`ticket_open_${p.panel_id}`)
+            .setLabel(p.button_label)
+            .setStyle(ButtonStyle[p.button_style] || ButtonStyle.Primary);
+
+        try { if(p.button_emoji) btn.setEmoji(p.button_emoji); } 
+        catch (e) { throw new Error(`Invalid Emoji: ${p.button_emoji}`); }
+
+        await channel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(btn)] });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/tickets/post-multipanel', auth, protectRoute, async (req, res) => {
+    const { guildId, panels, channelId } = req.body;
+    const { botClient } = req.app.locals;
+
+    try {
+        const guild = botClient.guilds.cache.get(guildId);
+        const channel = guild.channels.cache.get(channelId);
+        if (!channel) throw new Error("Channel not found");
+
+        const resDB = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1 AND panel_id = ANY($2)', [guildId, panels]);
+        const orderedPanels = panels.map(id => resDB.rows.find(r => r.panel_id === id)).filter(Boolean);
+
+        if (orderedPanels.length === 0) throw new Error("No valid panels found.");
+
+        const embeds = orderedPanels.map(p => new EmbedBuilder()
+            .setTitle(p.title)
+            .setDescription(p.description)
+            .setColor(p.panel_color || '#5865F2')
+        );
+        embeds[embeds.length - 1].setFooter({ text: 'Made by: ukirama' });
+
+        const buttons = [];
+        for (const p of orderedPanels) {
+            const btn = new ButtonBuilder()
+                .setCustomId(`ticket_open_${p.panel_id}`)
+                .setLabel(p.button_label)
+                .setStyle(ButtonStyle[p.button_style] || ButtonStyle.Primary);
+            
+            try { if(p.button_emoji) btn.setEmoji(p.button_emoji); }
+            catch (e) { throw new Error(`Invalid Emoji in panel '${p.title}': ${p.button_emoji}`); }
+            
+            buttons.push(btn);
+        }
+
+        const rows = [];
+        for (let i = 0; i < buttons.length; i += 5) {
+            rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+        }
+
+        await channel.send({ embeds, components: rows });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/appeals/:action', auth, async (req, res, next) => {
