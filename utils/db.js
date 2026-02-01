@@ -119,30 +119,28 @@ const db = {
                 UNIQUE (guildid, name)
             );
         `);
-const createTranscriptsTable = `
+
+        await db.query(`
             CREATE TABLE IF NOT EXISTS transcripts (
                 ticket_id TEXT PRIMARY KEY,
                 guild_id TEXT NOT NULL,
                 closed_by TEXT,
                 closed_at BIGINT,
                 messages JSONB NOT NULL
-            );`;
-            
-        await db.query(createTranscriptsTable); 
+            );`);
 
-        const createAppealsTable = `
-    CREATE TABLE IF NOT EXISTS ban_appeals (
-        id SERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        username TEXT NOT NULL,
-        guild_id TEXT NOT NULL,
-        reason TEXT,
-        status TEXT DEFAULT 'PENDING', -- PENDING, APPROVED, REJECTED, BLACKLISTED
-        message_id TEXT, -- ID del mensaje en el canal de staff para editarlo luego
-        timestamp BIGINT
-    );`;
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS ban_appeals (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                username TEXT NOT NULL,
+                guild_id TEXT NOT NULL,
+                reason TEXT,
+                status TEXT DEFAULT 'PENDING',
+                message_id TEXT,
+                timestamp BIGINT
+            );`);
 
-await db.query(createAppealsTable);
       
         try { await db.query(`ALTER TABLE modlogs RENAME COLUMN modid TO moderatorid`, [], true); } catch (e) {}
         try { await db.query(`ALTER TABLE modlogs ADD COLUMN moderatorid TEXT`, [], true); } catch (e) {}
@@ -155,6 +153,9 @@ await db.query(createAppealsTable);
         
         try { await db.query(`ALTER TABLE guild_settings ADD COLUMN universal_lock BOOLEAN DEFAULT FALSE`, [], true); } catch (e) {}
         try { await db.query(`ALTER TABLE guild_settings ADD COLUMN prefix TEXT DEFAULT '!'`, [], true); } catch (e) {}
+    
+        try { await db.query(`ALTER TABLE guild_settings ADD COLUMN log_channel_id TEXT`, [], true); } catch (e) {} 
+
         try { await db.query(`ALTER TABLE log_channels DROP CONSTRAINT log_channels_guildid_key`, [], true); } catch (e) {}
 
         try { await db.query(`ALTER TABLE ticket_panels ADD COLUMN ticket_limit INTEGER DEFAULT 1`, [], true); } catch (e) {}
@@ -164,7 +165,6 @@ await db.query(createAppealsTable);
         try { await db.query(`ALTER TABLE ticket_panels ADD COLUMN button_emoji TEXT DEFAULT '📩'`, [], true); } catch (e) {}
         try { await db.query(`ALTER TABLE ticket_panels ADD COLUMN button_label TEXT DEFAULT 'Open Ticket'`, [], true); } catch (e) {}
         
-       
         try { await db.query(`ALTER TABLE custom_commands ADD COLUMN allowed_roles TEXT`, [], true); } catch (e) {}
 
         console.log('✅ PostgreSQL Database Integrity Check Completed.');
