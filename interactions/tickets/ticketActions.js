@@ -6,7 +6,25 @@ const discordTranscripts = require('discord-html-transcripts');
 const { error, success } = require('../../utils/embedFactory.js');
 const { smartReply } = require('../../utils/interactionHelpers.js');
 
-const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:3001';
+const getDashboardURL = () => {
+    if (process.env.DASHBOARD_URL) return process.env.DASHBOARD_URL.replace(/\/$/, '');
+
+
+    if (process.env.CALLBACK_URL && process.env.CALLBACK_URL.startsWith('http')) {
+        try {
+            const url = new URL(process.env.CALLBACK_URL);
+            return `${url.protocol}//${url.host}`; 
+        } catch (e) {
+            console.warn("[WARN] CALLBACK_URL inválida para detectar dominio.");
+        }
+    }
+
+
+    return 'http://localhost:3001';
+};
+
+const DASHBOARD_URL = getDashboardURL();
+
 
 async function findSystemMessage(channel, client) {
     try {
@@ -24,7 +42,6 @@ async function closeTicket(interaction, client, db, reason = 'No reason provided
     if (ticketRes.rows.length === 0) return channel.delete().catch(() => {});
     const ticket = ticketRes.rows[0];
 
-
     if (ticket.user_id === user.id && !member.permissions.has(PermissionsBitField.Flags.Administrator)) {
         const panelRes = await db.query('SELECT support_role_id FROM ticket_panels WHERE panel_id = $1', [ticket.panel_id]);
         const supportRole = panelRes.rows[0]?.support_role_id;
@@ -41,9 +58,6 @@ async function closeTicket(interaction, client, db, reason = 'No reason provided
     ]);
 
     try {
-      
-        
-       
         const transcriptHtml = await discordTranscripts.createTranscript(channel, {
             limit: -1,
             returnType: 'string', 
@@ -55,7 +69,6 @@ async function closeTicket(interaction, client, db, reason = 'No reason provided
 
         const transcriptId = channel.id;
         const closeTime = Date.now();
-
         const dbData = { html: transcriptHtml };
 
         await db.query(
@@ -66,8 +79,6 @@ async function closeTicket(interaction, client, db, reason = 'No reason provided
         );
 
         const transcriptLink = `${DASHBOARD_URL}/transcript/${transcriptId}`;
-
-
         const durationText = `${Math.floor((closeTime - Number(ticket.created_at)) / 3600000)}h ${Math.floor(((closeTime - Number(ticket.created_at)) % 3600000) / 60000)}m`;
 
         const logEmbed = new EmbedBuilder()
