@@ -66,7 +66,6 @@ module.exports = async (interaction) => {
         return;
     }
 
-    // --- SUBMIT: Procesar formulario enviado ---
     if (interaction.isModalSubmit() && customId.startsWith('appeal:submit:')) {
         if (!await safeDefer(interaction, false, true)) return;
         try {
@@ -110,10 +109,8 @@ module.exports = async (interaction) => {
                 new ButtonBuilder().setCustomId(`appeal:blacklist:${caseId}:${interaction.user.id}:${MAIN_GUILD_ID}`).setLabel('Block & Reject').setStyle(ButtonStyle.Secondary).setEmoji('⛔')
             );
 
-            // 1. Enviar mensaje a Discord
             const msg = await channel.send({ embeds: [staffEmbed], components: [rows] });
             
-            // 2. GUARDAR EN LA BASE DE DATOS (NUEVO: Para que salga en la web)
             await db.query(
                 `INSERT INTO ban_appeals (user_id, username, guild_id, reason, status, message_id, timestamp)
                  VALUES ($1, $2, $3, $4, 'PENDING', $5, $6)`,
@@ -122,12 +119,12 @@ module.exports = async (interaction) => {
                     interaction.user.tag,
                     MAIN_GUILD_ID,
                     combinedReason,
-                    msg.id, // ID del mensaje para editarlo luego
+                    msg.id, 
                     Date.now()
                 ]
             );
             
-            // Deshabilitar botón original
+
             try {
                 if (interaction.message) {
                         const disabled = new ButtonBuilder().setCustomId('disabled').setLabel('Submitted').setStyle(ButtonStyle.Success).setDisabled(true);
@@ -143,8 +140,6 @@ module.exports = async (interaction) => {
         }
     }
 
-    // --- ACCIONES (Botones de Discord) ---
-    // NOTA: Estos botones seguirán funcionando en Discord, pero ahora también tenemos la Web API
     if (customId.startsWith('appeal:')) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return interaction.reply({ content: `No permission.`, flags: [MessageFlags.Ephemeral] });
         if (!await safeDefer(interaction, true)) return;

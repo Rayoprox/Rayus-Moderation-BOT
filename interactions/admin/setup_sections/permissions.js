@@ -41,21 +41,31 @@ module.exports = async (interaction) => {
     if (customId === 'setup_perms_edit_select') {
         if (!await safeDefer(interaction, true)) return;
         
-        const commands = client.commands
-            .filter(c => c.data.name !== 'setup')
+        const allCommands = client.commands
+            .filter(c => c.data.name !== 'setup' && c.category !== 'developer')
             .map(c => ({ label: `/${c.data.name}`, value: c.data.name }))
-            .slice(0, 25);
+            .sort((a, b) => a.label.localeCompare(b.label));
 
-        const menu = new StringSelectMenuBuilder()
-            .setCustomId('select_command_perms')
-            .setPlaceholder('Select command to edit...')
-            .addOptions(commands);
+        const chunkedCommands = [];
+        for (let i = 0; i < allCommands.length; i += 25) {
+            chunkedCommands.push(allCommands.slice(i, i + 25));
+        }
 
+        const components = [];
+        chunkedCommands.forEach((chunk, index) => {
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId(`select_command_perms_${index}`)
+                .setPlaceholder(`Select command to edit... (Page ${index + 1})`)
+                .addOptions(chunk);
+            components.push(new ActionRowBuilder().addComponents(menu));
+        });
+        
         const backButton = new ButtonBuilder().setCustomId('setup_permissions').setLabel('⬅️ Back to View').setStyle(ButtonStyle.Secondary);
+        components.push(new ActionRowBuilder().addComponents(backButton));
 
         await interaction.editReply({ 
-            embeds: [new EmbedBuilder().setTitle('✏️ Select Command').setDescription('Which command do you want to modify permissions for?')], 
-            components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(backButton)] 
+            embeds: [new EmbedBuilder().setTitle('✏️ Select Command').setDescription('Which command do you want to modify permissions for?\nThe command list is split into multiple pages if it exceeds 25.')], 
+            components: components
         });
         return;
     }
@@ -101,7 +111,7 @@ module.exports = async (interaction) => {
         return;
     }
 
-    if (interaction.isStringSelectMenu() && customId === 'select_command_perms') {
+    if (interaction.isStringSelectMenu() && customId.startsWith('select_command_perms')) {
         await safeDefer(interaction, true);
         const cmdName = values[0];
         

@@ -43,6 +43,7 @@ for (const folder of commandFolders) {
         const command = require(filePath);
         
         if ('data' in command && 'execute' in command) {
+            command.category = folder;
             client.commands.set(command.data.name, command);
 
             switch (command.deploy) {

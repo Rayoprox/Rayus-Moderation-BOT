@@ -237,7 +237,10 @@ app.get('/manage/:guildId/setup', auth, protectRoute, async (req, res) => {
         const ticketPanelsRes = await db.query('SELECT * FROM ticket_panels WHERE guild_id = $1', [guildId]);
         const ticketPanels = ticketPanelsRes.rows;
 
-        const botCommands = botClient.commands.map(c => c.data.name).filter(n => n !== 'setup').sort();
+        const botCommands = Array.from(botClient.commands.values())
+            .filter(c => c.category !== 'developer' && c.data.name !== 'setup')
+            .map(c => c.data.name)
+            .sort();
         const guildRoles = guild.roles.cache.map(r => ({ id: r.id, name: r.name, color: r.hexColor })).sort((a,b) => b.position - a.position);
         
         const channels = guild.channels.cache.map(c => ({ id: c.id, name: c.name, type: c.type, parentId: c.parentId })).sort((a,b) => a.position - b.position);
