@@ -166,7 +166,7 @@ module.exports = async (interaction) => {
             if (DISCORD_MAIN_INVITE) dmEmbed.addFields({ name: '🔗 Rejoin Server', value: `[**Click here**](${DISCORD_MAIN_INVITE})` });
 
             const unbanCaseId = caseId; 
-            await db.query(`UPDATE modlogs SET status = 'EXPIRED', endsAt = NULL WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND action = 'BAN'`, [banGuildId, userId]);
+            await db.query(`UPDATE modlogs SET status = 'EXPIRED', endsat = NULL WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND action = 'BAN'`, [banGuildId, userId]);
             await db.query(`INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, status, appealable) VALUES ($1, $2, 'UNBAN', $3, $4, $5, $6, 'Appeal Accepted', $7, 'EXECUTED', false)`, [unbanCaseId, banGuildId, userId, user.tag, interaction.user.id, interaction.user.tag, Date.now()]);
 
             const logRes = await db.query("SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = 'modlog'", [banGuildId]);

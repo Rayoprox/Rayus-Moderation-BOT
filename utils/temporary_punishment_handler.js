@@ -35,7 +35,7 @@ const processExpiredPunishment = async (client, log) => {
              }
         }
         
-        await db.query(`UPDATE modlogs SET status = 'EXPIRED', "endsat" = NULL WHERE caseid = $1`, [caseId]);
+        await db.query(`UPDATE modlogs SET status = 'EXPIRED', endsat = NULL WHERE caseid = $1`, [caseId]);
         console.log(`[SCHEDULER] Auto-expired ${action} for ${log.usertag} (Case ID: ${caseId}).`);
 
         const logActionType = action === 'BAN' ? 'UNBAN' : 'UNMUTE';
@@ -72,7 +72,7 @@ const processExpiredPunishment = async (client, log) => {
             }
         }
     } catch (error) {
-        await db.query(`UPDATE modlogs SET status = 'EXPIRED', "endsat" = NULL WHERE caseid = $1`, [caseId]);
+        await db.query(`UPDATE modlogs SET status = 'EXPIRED', endsat = NULL WHERE caseid = $1`, [caseId]);
         console.warn(`[SCHEDULER] Failed to auto-lift ${action} for ${log.usertag}. Error: ${error.message}`);
     }
 };
@@ -88,9 +88,9 @@ const checkAndResumePunishments = async (client) => {
         const activeResult = await db.query(`
             SELECT * FROM modlogs 
             WHERE status = 'ACTIVE' 
-            AND "endsat" IS NOT NULL 
-            AND "endsat" > $1 
-            AND "endsat" <= $2
+            AND endsat IS NOT NULL 
+            AND endsat > $1 
+            AND endsat <= $2
         `, [now, checkWindow]);
 
         for (const log of activeResult.rows) {
@@ -112,7 +112,7 @@ const checkAndResumePunishments = async (client) => {
             client.punishmentTimers.set(log.caseid, timer);
         }
     } catch (error) {
-        console.error("[SCHEDULER-ERROR] Failed to check punishments:", error.message);
+        console.error("[SCHEDULER-ERROR] Failed to check punishments:", error);
     }
 };
 
@@ -120,14 +120,14 @@ const resumePunishmentsOnStart = async (client) => {
     const db = client.db;
     const now = Date.now();
     
-    const expiredResult = await db.query(`SELECT * FROM modlogs WHERE status = 'ACTIVE' AND "endsat" IS NOT NULL AND "endsat" <= $1`, [now]);
+    const expiredResult = await db.query(`SELECT * FROM modlogs WHERE status = 'ACTIVE' AND endsat IS NOT NULL AND endsat <= $1`, [now]);
     for (const log of expiredResult.rows) {
         await processExpiredPunishment(client, log);
     }
 
     await checkAndResumePunishments(client);
     
-    const logsResult = await db.query(`SELECT usertag, action, endsat, action_duration FROM modlogs WHERE status = 'ACTIVE' AND "endsat" IS NOT NULL ORDER BY "endsat" ASC`);
+    const logsResult = await db.query(`SELECT usertag, action, endsat, action_duration FROM modlogs WHERE status = 'ACTIVE' AND endsat IS NOT NULL ORDER BY endsat ASC`);
     
     if (logsResult.rows.length > 0) {
         console.log('\n--- ACTIVE TEMPORARY PUNISHMENTS (Database View) ---');

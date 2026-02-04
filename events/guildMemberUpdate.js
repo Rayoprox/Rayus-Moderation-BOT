@@ -46,7 +46,7 @@ module.exports = {
                 }
                 
                 const result = await db.query(
-                    `UPDATE modlogs SET status = 'EXPIRED', "endsat" = NULL
+                    `UPDATE modlogs SET status = 'EXPIRED', endsat = NULL
                      WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND action = 'TIMEOUT'`,
                     [newMember.guild.id, newMember.id]
                 );

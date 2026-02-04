@@ -56,14 +56,14 @@ module.exports = {
             if (!targetMember.bannable) return interaction.editReply({ embeds: [error('I do not have permission to ban this user (their role is likely higher than mine).')] });
         }
         
-        let endsAt = null;
+        let endsat = null;
         let durationStrDisplay = 'Permanent';
         let dbDurationStr = null; 
 
         if (timeStr) {
             const durationMs = ms(timeStr);
             if (typeof durationMs !== 'number' || durationMs <= 0) return interaction.editReply({ embeds: [error('Invalid duration format.')] });
-            endsAt = currentTimestamp + durationMs; 
+            endsat = currentTimestamp + durationMs; 
             durationStrDisplay = timeStr;
             dbDurationStr = timeStr; 
         }
@@ -120,15 +120,15 @@ module.exports = {
         }
 
         await db.query(`
-            INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, endsAt, action_duration, appealable, dmstatus, status) 
+            INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, endsat, action_duration, appealable, dmstatus, status) 
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         `, [
             caseId, guildId, 'BAN', targetUser.id, targetUser.tag, 
             interaction.user.id, cleanModeratorTag, cleanReason, currentTimestamp, 
-            endsAt, dbDurationStr, (!shouldBlacklist ? 1 : 0), dmSent ? 'SENT' : 'FAILED', endsAt ? 'ACTIVE' : 'PERMANENT'
+            endsat, dbDurationStr, (!shouldBlacklist ? 1 : 0), dmSent ? 'SENT' : 'FAILED', endsat ? 'ACTIVE' : 'PERMANENT'
         ]);
 
-        if (endsAt) resumePunishmentsOnStart(interaction.client); 
+        if (endsat) resumePunishmentsOnStart(interaction.client); 
         if (shouldBlacklist) await db.query("INSERT INTO appeal_blacklist (userid, guildid) VALUES ($1, $2) ON CONFLICT DO NOTHING", [targetUser.id, guildId]);
 
         const modLogResult = await db.query("SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = 'modlog'", [guildId]);

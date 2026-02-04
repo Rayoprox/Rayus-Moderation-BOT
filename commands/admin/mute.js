@@ -44,7 +44,7 @@ module.exports = {
 
         if (!durationMs || durationMs < 5000 || durationMs > 2419200000) return interaction.editReply({ embeds: [error('Duration must be between 5 seconds and 28 days.')] });
 
-        const endsAt = Date.now() + durationMs;
+        const endsat = Date.now() + durationMs;
         const caseId = `CASE-${Date.now()}`;
         const moderatorTag = interaction.user.tag;
         const cleanModeratorTag = moderatorTag.trim();
@@ -78,11 +78,11 @@ module.exports = {
         }
 
         await db.query(`
-            INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, endsAt, action_duration, status, dmstatus)
+            INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, endsat, action_duration, status, dmstatus)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         `, [
             caseId, guildId, 'TIMEOUT', targetUser.id, targetUser.tag, 
-            interaction.user.id, cleanModeratorTag, cleanReason, currentTimestamp, endsAt, durationStr, 'ACTIVE', dmSent ? 'SENT' : 'FAILED'
+            interaction.user.id, cleanModeratorTag, cleanReason, currentTimestamp, endsat, durationStr, 'ACTIVE', dmSent ? 'SENT' : 'FAILED'
         ]);
 
         resumePunishmentsOnStart(interaction.client); 

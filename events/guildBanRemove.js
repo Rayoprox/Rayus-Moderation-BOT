@@ -21,7 +21,7 @@ module.exports = {
 
             const result = await db.query(
                 `UPDATE modlogs 
-                 SET status = $1, "endsat" = NULL
+                 SET status = $1, endsat = NULL
                  WHERE userid = $2 
                    AND guildid = $3 
                    AND action = $4 

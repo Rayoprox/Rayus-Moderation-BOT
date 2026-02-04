@@ -438,7 +438,7 @@ app.post('/api/appeals/:action', auth, async (req, res, next) => {
                 if (process.env.DISCORD_MAIN_INVITE) dm.addFields({ name: 'Link', value: process.env.DISCORD_MAIN_INVITE });
                 await targetUser.send({ embeds: [dm] }).catch(() => {});
             }
-            await db.query(`UPDATE modlogs SET status = 'EXPIRED', endsAt = NULL WHERE guildid = $1 AND userid = $2 AND action = 'BAN'`, [mainGuild.id, appeal.user_id]);
+            await db.query(`UPDATE modlogs SET status = 'EXPIRED', endsat = NULL WHERE guildid = $1 AND userid = $2 AND action = 'BAN'`, [mainGuild.id, appeal.user_id]);
             await db.query(`INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, status, appealable) VALUES ($1, $2, 'UNBAN', $3, $4, $5, $6, $7, $8, 'EXECUTED', false)`, [`UNBAN-${Date.now()}`, mainGuild.id, appeal.user_id, appeal.username, moderator.id, moderator.username, reason || 'Web Accept', Date.now()]);
         
         } else if (action === 'reject') {

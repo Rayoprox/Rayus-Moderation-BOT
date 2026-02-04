@@ -31,7 +31,7 @@ const db = {
                 id SERIAL PRIMARY KEY, caseid TEXT UNIQUE NOT NULL, guildid TEXT NOT NULL, 
                 userid TEXT NOT NULL, usertag TEXT, moderatorid TEXT NOT NULL, moderatortag TEXT, 
                 action TEXT NOT NULL, reason TEXT, timestamp BIGINT NOT NULL, dmstatus TEXT, 
-                status TEXT DEFAULT 'ACTIVE', endsAt BIGINT, action_duration TEXT, 
+                status TEXT DEFAULT 'ACTIVE', endsat BIGINT, action_duration TEXT, 
                 appealable BOOLEAN DEFAULT TRUE, logmessageid TEXT, proof TEXT, unban_timestamp BIGINT
             );
         `);

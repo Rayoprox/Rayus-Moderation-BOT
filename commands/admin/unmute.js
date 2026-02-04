@@ -47,7 +47,7 @@ module.exports = {
             }
         }
 
-        await db.query(`UPDATE modlogs SET status = 'EXPIRED', "endsat" = NULL WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND action = 'TIMEOUT'`, [guildId, targetUser.id]);
+        await db.query(`UPDATE modlogs SET status = 'EXPIRED', endsat = NULL WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND action = 'TIMEOUT'`, [guildId, targetUser.id]);
 
         const unmuteCaseId = `CASE-${currentTimestamp}`;
         await db.query(`INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, appealable, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [unmuteCaseId, guildId, 'UNMUTE', targetUser.id, targetUser.tag, interaction.user.id, cleanModeratorTag, cleanReason, currentTimestamp, 0, 'EXECUTED']);

@@ -97,7 +97,7 @@ module.exports = {
             const durationStr = ruleToExecute.action_duration;
             const autoCaseId = `AUTO-${Date.now()}`;
             const autoReason = `Automod: Triggered by reaching ${activeWarningsCount} warnings.`;
-            let endsAt = null;
+            let endsat = null;
             let autoDmSent = false;
 
             try {
@@ -124,11 +124,11 @@ module.exports = {
             try {
                 if ((action === 'MUTE' || action === 'TIMEOUT' || action === 'BAN') && durationStr) {
                     const durationMs = ms(durationStr);
-                    if (durationMs) endsAt = Date.now() + durationMs;
+                    if (durationMs) endsat = Date.now() + durationMs;
                 }
                 const dbAction = (action === 'MUTE' || action === 'TIMEOUT') ? 'TIMEOUT' : action;
-                await db.query(`INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, "endsat", action_duration, status, dmstatus) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`, [autoCaseId, guildId, dbAction, targetUser.id, targetUser.tag, interaction.client.user.id, interaction.client.user.tag, autoReason, Date.now(), endsAt, durationStr, 'ACTIVE', autoDmSent ? 'SENT' : 'FAILED']);
-                if (endsAt) resumePunishmentsOnStart(interaction.client);
+                await db.query(`INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, endsat, action_duration, status, dmstatus) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`, [autoCaseId, guildId, dbAction, targetUser.id, targetUser.tag, interaction.client.user.id, interaction.client.user.tag, autoReason, Date.now(), endsat, durationStr, 'ACTIVE', autoDmSent ? 'SENT' : 'FAILED']);
+                if (endsat) resumePunishmentsOnStart(interaction.client);
                 
                 if (action === 'KICK') await targetMember.kick(autoReason);
                 else if (action === 'BAN') await interaction.guild.bans.create(targetUser.id, { reason: autoReason });

@@ -48,17 +48,17 @@ module.exports = {
         console.log(`[INFO] Manual ban of ${cleanUserTag} by ${cleanExecutorTag} detected.`);
 
         const caseId = `MANUAL-${currentTimestamp}`;
-        const endsAt = null;
+        const endsat = null;
         const isAppealable = 1; 
         const dmStatus = 'N/A'; 
 
   
         await db.query(`
-            INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, endsAt, appealable, dmstatus, status)
+            INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, endsat, appealable, dmstatus, status)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         `, [
             caseId, guild.id, 'BAN', user.id, cleanUserTag, executor.id, cleanExecutorTag, 
-            finalReason, currentTimestamp, endsAt, isAppealable, dmStatus, 'PERMANENT'
+            finalReason, currentTimestamp, endsat, isAppealable, dmStatus, 'PERMANENT'
         ]);
         
         console.log(`[INFO] Created database entry for manual ban. Case ID: ${caseId}`);
