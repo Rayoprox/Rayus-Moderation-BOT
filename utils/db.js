@@ -152,6 +152,7 @@ const db = {
         try { await db.query(`ALTER TABLE modlogs ADD COLUMN logmessageid TEXT`, [], true); } catch (e) {}
         try { await db.query(`ALTER TABLE modlogs ADD COLUMN proof TEXT`, [], true); } catch (e) {}
         try { await db.query(`ALTER TABLE modlogs ADD COLUMN unban_timestamp BIGINT`, [], true); } catch (e) {}
+        try { await db.query(`ALTER TABLE modlogs RENAME COLUMN "endsAt" TO endsat;`, [], true); } catch (e) {}
         
         try { await db.query(`ALTER TABLE guild_settings ADD COLUMN universal_lock BOOLEAN DEFAULT FALSE`, [], true); } catch (e) {}
         try { await db.query(`ALTER TABLE guild_settings ADD COLUMN prefix TEXT DEFAULT '!'`, [], true); } catch (e) {}
