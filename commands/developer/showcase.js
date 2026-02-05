@@ -18,7 +18,7 @@ const COLORS = {
 };
 
 module.exports = {
-    deploy: 'main',
+    deploy: 'developer',
     data: new SlashCommandBuilder()
         .setName('showcase')
         .setDescription('Visual gallery of ALL Bot Embeds (Developer Only).')

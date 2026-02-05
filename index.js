@@ -48,6 +48,7 @@ for (const folder of commandFolders) {
 
             switch (command.deploy) {
                 case 'main': mainGuildCommands.push(command.data.toJSON()); break;
+                case 'developer': mainGuildCommands.push(command.data.toJSON()); break;
                 case 'appeal': appealGuildCommands.push(command.data.toJSON()); break;
                 case 'all': 
                 case 'global': globalCommands.push(command.data.toJSON()); break;

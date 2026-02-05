@@ -4,7 +4,7 @@ const { error, success } = require('../../utils/embedFactory.js');
 const { DEVELOPER_IDS } = require('../../utils/config.js');
 
 module.exports = {
-    deploy: 'main',
+    deploy: 'developer',
     data: new SlashCommandBuilder()
         .setName('delete_license')
         .setDescription('Developer: Revoke/Delete a license from a server ID.')

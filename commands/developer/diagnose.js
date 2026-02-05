@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 module.exports = {
-    deploy: 'main',
+    deploy: 'developer',
     data: new SlashCommandBuilder()
         .setName('diagnose')
         .setDescription('Developer: Runs a silent system integrity check (Console Output).')

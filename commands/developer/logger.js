@@ -3,7 +3,7 @@ const { setWebhook } = require('../../utils/logger.js');
 const { moderation, error } = require('../../utils/embedFactory.js'); 
 const { DEVELOPER_IDS } = require('../../utils/config.js'); 
 module.exports = {
-    deploy: 'global',
+    deploy: 'developer',
     data: new SlashCommandBuilder()
         .setName('logger')
         .setDescription('Set the Webhook for persistent console mirroring.')

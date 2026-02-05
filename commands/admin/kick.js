@@ -30,7 +30,6 @@ module.exports = {
         
         const guildSettingsResult = await db.query('SELECT staff_roles FROM guild_settings WHERE guildid = $1', [guildId]);
         const guildSettings = guildSettingsResult.rows[0];
-        
         const staffIds = guildSettings?.staff_roles ? guildSettings.staff_roles.split(',') : [];
         if (targetMember.roles.cache.some(r => staffIds.includes(r.id))) return interaction.editReply({ embeds: [error('You cannot moderate a staff member.')] });
         if (moderatorMember.roles.highest.position <= targetMember.roles.highest.position) return interaction.editReply({ embeds: [error('You cannot kick a user with a role equal to or higher than your own.')] });

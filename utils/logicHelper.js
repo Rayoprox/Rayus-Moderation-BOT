@@ -31,18 +31,17 @@ async function validateCommandPermissions(client, guild, member, user, commandNa
     let guildData = guildCache.get(guild.id);
     
     if (!guildData) {
+        const mainGuildId = process.env.DISCORD_GUILD_ID;
         const [settingsRes, permsRes] = await Promise.all([
-            db.query('SELECT universal_lock, staff_roles FROM guild_settings WHERE guildid = $1', [guild.id]),
-            db.query('SELECT command_name, role_id FROM command_permissions WHERE guildid = $1', [guild.id])
+            db.query('SELECT universal_lock FROM guild_settings WHERE guildid = $1', [mainGuildId]),
+            db.query('SELECT command_name, role_id FROM command_permissions WHERE guildid = $1', [mainGuildId])
         ]);
         guildData = { settings: settingsRes.rows[0] || {}, permissions: permsRes.rows };
         guildCache.set(guild.id, guildData);
     }
 
     const universalLock = guildData.settings.universal_lock === true;
-    
-    const staffRoles = guildData.settings.staff_roles?.split(',').map(r => r.trim()) || [];
-    
+
     const specificRoles = guildData.permissions
         .filter(p => p.command_name === commandName)
         .map(r => r.role_id);
@@ -50,7 +49,6 @@ async function validateCommandPermissions(client, guild, member, user, commandNa
     let isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
     if (universalLock) isAdmin = false; 
 
-    const isGlobalStaff = member.roles.cache.some(r => staffRoles.includes(r.id));
     const hasSpecificRules = specificRoles.length > 0;
     const hasSpecificPermission = hasSpecificRules && member.roles.cache.some(r => specificRoles.includes(r.id));
     const isPublic = command.isPublic ?? false;
@@ -62,7 +60,7 @@ async function validateCommandPermissions(client, guild, member, user, commandNa
     else if (hasSpecificRules) { 
         if (hasSpecificPermission) allowed = true; 
     }
-    else if (isGlobalStaff && isStaffCommand) allowed = true;
+    
     else if (isPublic) allowed = true;
 
     if (!allowed) {

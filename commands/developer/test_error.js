@@ -2,7 +2,8 @@ const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const { DEVELOPER_IDS } = require('../../utils/config');
 
 module.exports = {
-    deploy: 'main',
+    deploy: 'developer',
+    category: 'developer',
     data: new SlashCommandBuilder()
         .setName('test_error')
         .setDescription('Error Testing')

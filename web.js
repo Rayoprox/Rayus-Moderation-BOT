@@ -94,37 +94,47 @@ const protectRoute = async (req, res, next) => {
     if (SUPREME_IDS.includes(userId)) return next();
 
     try {
-        const settingsRes = await db.query('SELECT universal_lock FROM guild_settings WHERE guildid = $1', [targetGuildId]);
-        if (settingsRes.rows[0]?.universal_lock) {
-            if (req.xhr || req.headers.accept.indexOf('json') > -1) return res.status(403).json({ error: '⛔ Universal Lockdown Active.' });
-            return res.render('error', { message: '⛔ <b>Lockdown Active</b><br>Access restricted by Administration.' });
-        }
+        const mgId = process.env.DISCORD_GUILD_ID;
+        const settingsRes = await db.query('SELECT universal_lock FROM guild_settings WHERE guildid = $1', [mgId]);
+        const universalLock = !!settingsRes.rows[0]?.universal_lock;
 
-        const mainGuildId = process.env.DISCORD_GUILD_ID;
-        const mainGuild = botClient.guilds.cache.get(mainGuildId);
+        const mainGuild = botClient.guilds.cache.get(mgId);
         if (!mainGuild) return res.status(404).send('Main Server not accessible.');
 
         const memberInMain = await mainGuild.members.fetch(userId).catch(() => null);
         if (!memberInMain) return res.render('error', { message: '⛔ <b>Access Denied</b><br>You must be a member of the <b>Main Server</b>.' });
 
         const isAdmin = memberInMain.permissions.has(PermissionsBitField.Flags.Administrator);
-        const setupPerms = await db.query("SELECT role_id FROM command_permissions WHERE guildid = $1 AND command_name = 'setup'", [mainGuildId]);
+        const setupPerms = await db.query("SELECT role_id FROM command_permissions WHERE guildid = $1 AND command_name = 'setup'", [mgId]);
         const hasSetupRole = setupPerms.rows.some(row => memberInMain.roles.cache.has(row.role_id));
-        
-        const staffRes = await db.query('SELECT staff_roles FROM guild_settings WHERE guildid = $1', [mainGuildId]);
-        let hasStaffRole = false;
-        if (staffRes.rows[0]?.staff_roles) {
-            hasStaffRole = staffRes.rows[0].staff_roles.split(',').some(rId => memberInMain.roles.cache.has(rId));
+
+        const banPerms = await db.query("SELECT role_id FROM command_permissions WHERE guildid = $1 AND command_name = 'ban'", [mgId]);
+        const hasBanRole = banPerms.rows.some(row => memberInMain.roles.cache.has(row.role_id));
+
+
+        // Main server access rules
+        if (targetGuildId === mgId) {
+            if (universalLock) {
+                if (hasSetupRole) return next();
+                if (req.xhr || req.headers.accept.indexOf('json') > -1) return res.status(403).json({ error: '⛔ Universal Lockdown Active.' });
+                return res.render('error', { message: '⛔ <b>Lockdown Active</b><br>Access restricted by Administration.' });
+            } else {
+                if (isAdmin || hasSetupRole) return next();
+                return res.render('error', { message: '⛔ <b>Access Denied</b><br>Requires <b>Administrator</b> or <b>Setup Permission</b>.' });
+            }
         }
 
-        if (targetGuildId === process.env.DISCORD_GUILD_ID) {
-            if (isAdmin || hasSetupRole) return next();
-            return res.render('error', { message: '⛔ <b>Access Denied</b><br>Requires <b>Administrator</b> or <b>Setup Role</b>.' });
-        }
+        // Appeals server access rules
         if (targetGuildId === process.env.DISCORD_APPEAL_GUILD_ID) {
-            if (isAdmin || hasSetupRole || hasStaffRole) return next();
-            return res.render('error', { message: '⛔ <b>Access Denied</b><br>Requires <b>Staff</b>, <b>Admin</b>, or <b>Setup Role</b>.' });
+            if (universalLock) {
+                if (hasSetupRole || hasBanRole) return next();
+                return res.render('error', { message: '⛔ <b>Access Denied</b><br>Requires <b>Setup Permission</b> or <b>Ban Permission</b> during Lockdown.' });
+            } else {
+                if (isAdmin || hasSetupRole || hasBanRole) return next();
+                return res.render('error', { message: '⛔ <b>Access Denied</b><br>Requires <b>Administrator</b>, <b>Setup Permission</b>, or <b>Ban Permission</b>.' });
+            }
         }
+
         return res.status(403).send('Invalid Guild Context');
 
     } catch (err) {

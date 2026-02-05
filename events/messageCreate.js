@@ -18,7 +18,7 @@ module.exports = {
 
         let guildData = guildCache.get(guild.id);
       
-        if (!guildData || !guildData.settings || guildData.settings.staff_roles === undefined) {
+        if (!guildData || !guildData.settings) {
             const [settingsRes, permsRes] = await Promise.all([
                 db.query('SELECT * FROM guild_settings WHERE guildid = $1', [guild.id]),
                 db.query('SELECT command_name, role_id FROM command_permissions WHERE guildid = $1', [guild.id])

@@ -5,7 +5,7 @@ const { error } = require('../../utils/embedFactory.js');
 const { v4: uuidv4 } = require('uuid');
 
 module.exports = {
-    deploy: 'main', 
+    deploy: 'developer', 
     data: new SlashCommandBuilder()
         .setName('generate_license')
         .setDescription('Developer Only: Generate a new license key.')
