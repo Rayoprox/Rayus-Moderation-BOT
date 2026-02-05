@@ -3,8 +3,8 @@ const { Pool } = require('pg');
 const pool = new Pool({
     connectionString: process.env.POSTGRES_URL,
     ssl: { rejectUnauthorized: false },
-    idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 0,
+    connectionTimeoutMillis: 0,
 });
 
 pool.on('error', (err, client) => {
