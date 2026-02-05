@@ -174,4 +174,12 @@ const db = {
     }
 };
 
+const keepAlive = () => {
+    db.query('SELECT 1;', [], true)
+        .then(() => console.log('🔄 Sent keep-alive ping to the database.'))
+        .catch(err => console.error('❌ Failed to send keep-alive ping:', err));
+};
+
+setInterval(keepAlive, 6 * 60 * 60 * 1000); 
+
 module.exports = db;
