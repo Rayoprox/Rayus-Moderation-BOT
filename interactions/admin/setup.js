@@ -34,6 +34,8 @@ module.exports = {
                 const newPrefix = interaction.fields.getTextInputValue('prefix_input').trim();
                 
                 if (!newPrefix) return smartReply(interaction, { embeds: [error("Prefix cannot be empty.")] });
+                if (newPrefix.length > 3) return smartReply(interaction, { embeds: [error("Prefix must be 3 characters or less.")] });
+                if (!/^[a-zA-Z0-9!@#$%^&*\-_+=.?~`]+$/.test(newPrefix)) return smartReply(interaction, { embeds: [error("Prefix contains invalid characters. Use letters, numbers, or: !@#$%^&*-_+=.?~`")] });
 
                 try {
                     await db.query(`INSERT INTO guild_settings (guildid, prefix) VALUES ($1, $2) ON CONFLICT (guildid) DO UPDATE SET prefix = $2`, [guild.id, newPrefix]);

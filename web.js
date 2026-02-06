@@ -21,6 +21,10 @@ function isValidEmoji(emoji) {
     return unicodeRegex.test(emoji) || customRegex.test(emoji) || idRegex.test(emoji);
 }
 
+function isValidHexColor(color) {
+    return /^#[0-9A-Fa-f]{6}$|^#[0-9A-Fa-f]{3}$/.test(color);
+}
+
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
@@ -278,6 +282,123 @@ app.post('/api/setup/:guildId', auth, protectRoute, async (req, res) => {
     } = req.body;
 
     try {
+        // Validate prefix
+        if (!prefix || prefix.trim().length === 0) {
+            return res.status(400).json({ error: 'Prefix cannot be empty.' });
+        }
+        if (prefix.length > 3) {
+            return res.status(400).json({ error: 'Prefix must be 3 characters or less.' });
+        }
+        if (!/^[a-zA-Z0-9!@#$%^&*\-_+=.?~`]+$/.test(prefix)) {
+            return res.status(400).json({ error: 'Prefix contains invalid characters. Use letters, numbers, or: !@#$%^&*-_+=.?~`' });
+        }
+
+        // Validate antinuke thresholds
+        const threshCount = parseInt(antinuke_threshold_count);
+        if (isNaN(threshCount) || threshCount < 1 || threshCount > 1000) {
+            return res.status(400).json({ error: 'Antinuke threshold must be between 1 and 1000.' });
+        }
+        
+        const threshTime = parseInt(antinuke_threshold_time);
+        if (isNaN(threshTime) || threshTime < 10 || threshTime > 86400) {
+            return res.status(400).json({ error: 'Antinuke window must be between 10 and 86400 seconds.' });
+        }
+
+        // Validate automod rules
+        if (automod_rules && Array.isArray(automod_rules)) {
+            const seenWarnings = new Set();
+            for (const rule of automod_rules) {
+                if (rule.warnings < 1 || rule.warnings > 10) {
+                    return res.status(400).json({ error: 'Automod warnings must be between 1 and 10.' });
+                }
+                if (seenWarnings.has(rule.warnings)) {
+                    return res.status(400).json({ error: 'Duplicate warning counts in automod rules.' });
+                }
+                seenWarnings.add(rule.warnings);
+                if (!['BAN', 'MUTE', 'KICK'].includes(rule.action)) {
+                    return res.status(400).json({ error: 'Invalid automod action.' });
+                }
+            }
+        }
+
+        // Validate custom commands
+        if (custom_commands && Array.isArray(custom_commands)) {
+            const seenNames = new Set();
+            for (const cc of custom_commands) {
+                if (!cc.name || cc.name.trim().length === 0) {
+                    return res.status(400).json({ error: 'Custom command name cannot be empty.' });
+                }
+                if (cc.name.length > 50) {
+                    return res.status(400).json({ error: 'Custom command name must be 50 characters or less.' });
+                }
+                if (!/^[a-z0-9_-]+$/.test(cc.name.toLowerCase())) {
+                    return res.status(400).json({ error: `Command name "${cc.name}" contains invalid characters.` });
+                }
+                if (seenNames.has(cc.name.toLowerCase())) {
+                    return res.status(400).json({ error: `Duplicate command name: "${cc.name}"` });
+                }
+                seenNames.add(cc.name.toLowerCase());
+            }
+        }
+
+        // Validate ticket panels
+        if (ticket_panels && Array.isArray(ticket_panels)) {
+            const seenIds = new Set();
+            for (const tp of ticket_panels) {
+                if (!tp.id || tp.id.trim().length === 0) {
+                    return res.status(400).json({ error: 'Panel ID cannot be empty.' });
+                }
+                if (tp.id.length > 50) {
+                    return res.status(400).json({ error: 'Panel ID must be 50 characters or less.' });
+                }
+                if (!/^[a-z0-9-_]+$/.test(tp.id.toLowerCase())) {
+                    return res.status(400).json({ error: `Panel ID "${tp.id}" contains invalid characters.` });
+                }
+                if (seenIds.has(tp.id.toLowerCase())) {
+                    return res.status(400).json({ error: `Duplicate panel ID: "${tp.id}"` });
+                }
+                seenIds.add(tp.id.toLowerCase());
+                
+                if (!tp.title || tp.title.trim().length === 0) {
+                    return res.status(400).json({ error: `Panel "${tp.id}" title cannot be empty.` });
+                }
+                if (tp.title.length > 100) {
+                    return res.status(400).json({ error: `Panel "${tp.id}" title must be 100 characters or less.` });
+                }
+                
+                if (tp.description && tp.description.length > 500) {
+                    return res.status(400).json({ error: `Panel "${tp.id}" description must be 500 characters or less.` });
+                }
+                
+                if (!tp.btnLabel || tp.btnLabel.trim().length === 0) {
+                    return res.status(400).json({ error: `Panel "${tp.id}" button label cannot be empty.` });
+                }
+                if (tp.btnLabel.length > 80) {
+                    return res.status(400).json({ error: `Panel "${tp.id}" button label must be 80 characters or less.` });
+                }
+                
+                if (tp.btnEmoji && !isValidEmoji(tp.btnEmoji)) {
+                    return res.status(400).json({ error: `Invalid emoji in panel '${tp.title}': ${tp.btnEmoji}` });
+                }
+                
+                if (tp.ticketLimit && (isNaN(tp.ticketLimit) || tp.ticketLimit < 1 || tp.ticketLimit > 100)) {
+                    return res.status(400).json({ error: `Panel "${tp.id}" ticket limit must be between 1 and 100.` });
+                }
+                
+                if (tp.panelColor && !isValidHexColor(tp.panelColor)) {
+                    return res.status(400).json({ error: `Panel "${tp.id}" has invalid color: ${tp.panelColor}` });
+                }
+                
+                if (tp.welcomeColor && !isValidHexColor(tp.welcomeColor)) {
+                    return res.status(400).json({ error: `Panel "${tp.id}" welcome color is invalid: ${tp.welcomeColor}` });
+                }
+                
+                if (tp.welcomeMsg && tp.welcomeMsg.length > 2000) {
+                    return res.status(400).json({ error: `Panel "${tp.id}" welcome message must be 2000 characters or less.` });
+                }
+            }
+        }
+
         if (ticket_panels && Array.isArray(ticket_panels)) {
             for (const tp of ticket_panels) {
                 if (tp.btnEmoji && !isValidEmoji(tp.btnEmoji)) {

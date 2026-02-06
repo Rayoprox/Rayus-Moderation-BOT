@@ -357,10 +357,15 @@ module.exports = async (interaction) => {
 
     if (customId.startsWith('tkt_save_button_txt_')) {
         const pId = customId.replace('tkt_save_button_txt_', '');
-        const emoji = fields.getTextInputValue('emoji');
-        if (!/(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff]|<a?:\w+:\d+>)/g.test(emoji)) return await smartReply(interaction, { embeds: [error('Invalid Emoji.')] }, true);
+        const label = fields.getTextInputValue('label').trim();
+        const emoji = fields.getTextInputValue('emoji').trim();
+        
+        if (!label) return await smartReply(interaction, { embeds: [error('Button label cannot be empty.')] }, true);
+        if (label.length > 80) return await smartReply(interaction, { embeds: [error('Button label must be 80 characters or less.')] }, true);
+        if (emoji && !/(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff]|<a?:\w+:\d+>)/g.test(emoji)) return await smartReply(interaction, { embeds: [error('Invalid Emoji.')] }, true);
+        
         if (!await safeDefer(interaction, true)) return;
-        await db.query(`UPDATE ticket_panels SET button_label = $1, button_emoji = $2 WHERE guild_id = $3 AND panel_id = $4`, [fields.getTextInputValue('label'), emoji, guildId, pId]);
+        await db.query(`UPDATE ticket_panels SET button_label = $1, button_emoji = $2 WHERE guild_id = $3 AND panel_id = $4`, [label, emoji || '📩', guildId, pId]);
         return showAppearanceMenu(interaction, db, guildId, pId);
     }
 
@@ -451,8 +456,8 @@ module.exports = async (interaction) => {
         const pId = customId.replace('tkt_save_limit_', '');
         const limitVal = parseInt(fields.getTextInputValue('limit_input'));
 
-        if (isNaN(limitVal) || limitVal < 1) {
-            return await smartReply(interaction, { embeds: [error('Limit must be a valid number greater than 0.')] }, true);
+        if (isNaN(limitVal) || limitVal < 1 || limitVal > 100) {
+            return await smartReply(interaction, { embeds: [error('Ticket limit must be a number between 1 and 100.')] }, true);
         }
 
         await db.query('UPDATE ticket_panels SET ticket_limit = $1 WHERE guild_id = $2 AND panel_id = $3', [limitVal, guildId, pId]);
@@ -464,7 +469,22 @@ module.exports = async (interaction) => {
 
     if (customId.startsWith('tkt_back_')) { if (!await safeDefer(interaction, true)) return; return showPanelDashboard(interaction, db, guildId, customId.replace('tkt_back_', '')); }
     if (customId === 'ticket_panel_create') { const modal = new ModalBuilder().setCustomId('ticket_panel_create_modal').setTitle('New Panel'); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_unique_id').setLabel("Internal ID").setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_title').setLabel("Title").setStyle(TextInputStyle.Short).setRequired(true))); return await interaction.showModal(modal); }
-    if (customId === 'ticket_panel_create_modal') { if (!await safeDefer(interaction, true)) return; const pId = fields.getTextInputValue('panel_unique_id').toLowerCase().replace(/[^a-z0-9-_]/g, ''); const title = fields.getTextInputValue('panel_title'); await db.query(`INSERT INTO ticket_panels (guild_id, panel_id, title) VALUES ($1, $2, $3)`, [guildId, pId, title]); return showPanelDashboard(interaction, db, guildId, pId); }
+    if (customId === 'ticket_panel_create_modal') { 
+        if (!await safeDefer(interaction, true)) return; 
+        const rawPId = fields.getTextInputValue('panel_unique_id').trim();
+        const title = fields.getTextInputValue('panel_title').trim();
+        
+        if (!rawPId) return await smartReply(interaction, { embeds: [error('Panel ID cannot be empty.')] }, true);
+        if (rawPId.length > 50) return await smartReply(interaction, { embeds: [error('Panel ID must be 50 characters or less.')] }, true);
+        if (!/^[a-z0-9-_]+$/.test(rawPId.toLowerCase())) return await smartReply(interaction, { embeds: [error('Panel ID must contain only letters, numbers, hyphens, and underscores.')] }, true);
+        
+        if (!title) return await smartReply(interaction, { embeds: [error('Panel title cannot be empty.')] }, true);
+        if (title.length > 100) return await smartReply(interaction, { embeds: [error('Panel title must be 100 characters or less.')] }, true);
+        
+        const pId = rawPId.toLowerCase().replace(/[^a-z0-9-_]/g, ''); 
+        await db.query(`INSERT INTO ticket_panels (guild_id, panel_id, title) VALUES ($1, $2, $3)`, [guildId, pId, title]); 
+        return showPanelDashboard(interaction, db, guildId, pId); 
+    }
     if (customId.startsWith('tkt_preview_')) { if (!await safeDefer(interaction, true)) return; const pId = customId.replace('tkt_preview_', ''); const menu = new ChannelSelectMenuBuilder().setCustomId(`tkt_deploy_final_${pId}`).setPlaceholder('Destination...').addChannelTypes(ChannelType.GuildText); await smartReply(interaction, { content: null, embeds: [new EmbedBuilder().setTitle('📨 Post').setDescription('Select channel.').setColor('#2ECC71')], components: [new ActionRowBuilder().addComponents(menu)] }); }
     
     if (interaction.isChannelSelectMenu() && customId.startsWith('tkt_deploy_final_')) { 

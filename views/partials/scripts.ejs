@@ -28,6 +28,10 @@
         const regex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])|<?(a)?:?(\w{2,32}):(\d{17,19})>?|^\d{17,19}$/;
         return regex.test(emoji);
     }
+    
+    function isHexColor(color) {
+        return /^#[0-9A-Fa-f]{6}$|^#[0-9A-Fa-f]{3}$/.test(color);
+    }
 
     function showToast(msg, type='info') {
         const t = document.getElementById('toast');
@@ -131,6 +135,9 @@
         const w = parseInt(document.getElementById('am_warns').value), a = document.getElementById('am_action').value, d = document.getElementById('am_duration').value;
         if(isNaN(w)||w<1||w>10) return showToast("Warnings must be 1-10", 'error');
         if(a==='Timeout'&&!d) return showToast("Timeout requires duration", 'error');
+        if(a!=='Kick'&&(!d||d.trim()==='')) return showToast("Duration is required", 'error');
+        if(isNaN(w)||w<1||w>10) return showToast("Warnings must be 1-10", 'error');
+        if(automodRules.find(r=>r.warnings===w)) return showToast("This warning count already exists", 'error');
         automodRules.push({warnings:w, action:a, duration:d}); automodRules.sort((a,b)=>a.warnings-b.warnings);
         renderAutomod(); document.getElementById('am_warns').value=''; document.getElementById('am_duration').value='';
     }
@@ -191,6 +198,14 @@
         const type = document.getElementById('cc_mode').value;
         const roles = Array.from(document.getElementById('edit_cc_roles').selectedOptions).map(o=>o.value);
         if(!name) return showToast("Command Name required", 'error');
+        if(name.length > 50) return showToast("Command name must be 50 characters or less", 'error');
+        if(!/^[a-z0-9_-]+$/.test(name)) return showToast("Command name must contain only letters, numbers, hyphens, and underscores", 'error');
+        if(customCommands.find(c=>c.name===name && currentCCIndex===-1)) return showToast("This command name already exists", 'error');
+        const content = document.getElementById('cc_content').value.trim();
+        const title = document.getElementById('cc_emb_title').value.trim();
+        const desc = document.getElementById('cc_emb_desc').value.trim();
+        if(type==='text'&&!content) return showToast("Text command needs content", 'error');
+        if(type==='embed'&&!title&&!desc) return showToast("Embed needs at least a title or description", 'error');
         const newCmd = {
             name, type, roles,
             content: document.getElementById('cc_content').value,
@@ -243,25 +258,49 @@
     }
     function saveTicket() {
         const id = document.getElementById('tk_id').value.trim();
+        const title = document.getElementById('tk_title').value.trim();
+        const desc = document.getElementById('tk_desc').value.trim();
+        const btnLabel = document.getElementById('tk_btn_lbl').value.trim();
         const emoji = document.getElementById('tk_btn_emoji').value.trim();
+        const welcomeMsg = document.getElementById('tk_welcome').value.trim();
         const limit = parseInt(document.getElementById('tk_limit').value);
+        
         if(!id) return showToast("Panel ID Required", 'error');
+        if(id.length > 50) return showToast("Panel ID must be 50 characters or less", 'error');
+        if(!/^[a-z0-9-_]+$/.test(id)) return showToast("Panel ID must contain only letters, numbers, hyphens, and underscores", 'error');
+        
+        if(!title) return showToast("Panel title required", 'error');
+        if(title.length > 100) return showToast("Panel title must be 100 characters or less", 'error');
+        
+        if(desc && desc.length > 500) return showToast("Panel description must be 500 characters or less", 'error');
+        
+        if(!btnLabel) return showToast("Button label required", 'error');
+        if(btnLabel.length > 80) return showToast("Button label must be 80 characters or less", 'error');
+        
         if(emoji && !isValidEmoji(emoji)) return showToast("Invalid Emoji", 'error');
-        if(limit < 1) return showToast("Limit must be at least 1", 'error');
+        
+        if(welcomeMsg && welcomeMsg.length > 2000) return showToast("Welcome message must be 2000 characters or less", 'error');
+        
+        if(isNaN(limit) || limit < 1 || limit > 100) return showToast("Ticket limit must be between 1 and 100", 'error');
+        const panelColor = document.getElementById('tk_col_panel').value.trim();
+        const welcomeColor = document.getElementById('tk_col_welcome').value.trim();
+        if(!isHexColor(panelColor)) return showToast("Panel color must be a valid HEX color", 'error');
+        if(!isHexColor(welcomeColor)) return showToast("Welcome color must be a valid HEX color", 'error');
+        
         const panel = {
             id: id,
-            title: document.getElementById('tk_title').value,
-            description: document.getElementById('tk_desc').value,
+            title: title,
+            description: desc,
             category: document.getElementById('tk_cat').value,
             supportRole: document.getElementById('tk_role_supp').value,
             blacklistRole: document.getElementById('tk_role_black').value,
             logChannel: document.getElementById('tk_log').value,
-            btnLabel: document.getElementById('tk_btn_lbl').value,
+            btnLabel: btnLabel,
             btnEmoji: emoji,
             btnStyle: document.getElementById('tk_btn_style').value,
-            welcomeMsg: document.getElementById('tk_welcome').value,
-            panelColor: document.getElementById('tk_col_panel').value,
-            welcomeColor: document.getElementById('tk_col_welcome').value,
+            welcomeMsg: welcomeMsg,
+            panelColor: panelColor,
+            welcomeColor: welcomeColor,
             ticketLimit: limit
         };
         if(currentTicketIndex === -1) ticketPanels.push(panel);
@@ -292,21 +331,33 @@
     async function saveConfig() {
         const btn = document.getElementById('saveBtn');
         btn.innerText = "SAVING..."; btn.style.opacity = "0.7";
+        
+        const prefix = document.getElementById('prefix').value.trim();
+        if(!prefix) { showToast("Prefix cannot be empty", 'error'); btn.style.opacity = "1"; btn.innerText = "SAVE CHANGES"; return; }
+        if(prefix.length > 3) { showToast("Prefix must be 3 characters or less", 'error'); btn.style.opacity = "1"; btn.innerText = "SAVE CHANGES"; return; }
+        if(!/^[a-zA-Z0-9!@#$%^&*\-_+=.?~`]+$/.test(prefix)) { showToast("Prefix contains invalid characters", 'error'); btn.style.opacity = "1"; btn.innerText = "SAVE CHANGES"; return; }
+        
+        const threshCount = parseInt(document.getElementById('antinuke_threshold_count').value);
+        if(isNaN(threshCount) || threshCount < 1 || threshCount > 1000) { showToast("Threshold must be between 1 and 1000", 'error'); btn.style.opacity = "1"; btn.innerText = "SAVE CHANGES"; return; }
+        
+        const threshTime = parseInt(document.getElementById('antinuke_threshold_time').value);
+        if(isNaN(threshTime) || threshTime < 10 || threshTime > 86400) { showToast("Window must be between 10 and 86400 seconds", 'error'); btn.style.opacity = "1"; btn.innerText = "SAVE CHANGES"; return; }
+        
         const finalCC = customCommands.map(c => ({
             name: c.name,
             roles: c.roles,
             response: JSON.stringify(c.type === 'embed' ? { embeds: [c.embedData] } : { content: c.content })
         }));
         const data = {
-            prefix: document.getElementById('prefix').value,
+            prefix: prefix,
             staff_roles: Array.from(document.getElementById('staff_roles').selectedOptions).map(o=>o.value).filter(v=>v).join(','),
             log_mod: document.getElementById('log_mod').value,
             log_cmd: document.getElementById('log_cmd').value,
             log_appeal: document.getElementById('log_appeal').value,
             log_nuke: document.getElementById('log_nuke').value,
             antinuke_enabled: document.getElementById('antinuke').checked ? 'on':'off',
-            antinuke_threshold_count: parseInt(document.getElementById('antinuke_threshold_count').value) || 10,
-            antinuke_threshold_time: parseInt(document.getElementById('antinuke_threshold_time').value) || 60,
+            antinuke_threshold_count: threshCount,
+            antinuke_threshold_time: threshTime,
             antinuke_action: document.getElementById('antinuke_action').value,
             antinuke_ignore_supreme: document.getElementById('antinuke_ignore_supreme').checked ? 'on':'off',
             antinuke_ignore_verified: document.getElementById('antinuke_ignore_verified').checked ? 'on':'off',
