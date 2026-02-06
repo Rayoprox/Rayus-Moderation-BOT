@@ -52,7 +52,12 @@ module.exports = {
                         if (!senderHasBypass) {
                             // Use the role name (do NOT ping the role) and reply to the offending message with a polite embed
                             // Pick the most significant protected role (highest position) to mention by name
-                            const protectedRoleObjs = (protectedRoles || []).map(id => guild.roles.cache.get(id)).filter(Boolean);
+                            // Resolve protected roles which may be stored as IDs or names
+                            const protectedRoleObjs = (protectedRoles || []).map(idOrName => {
+                                let r = guild.roles.cache.get(idOrName);
+                                if (!r) r = guild.roles.cache.find(x => x.name && x.name.toLowerCase() === String(idOrName).toLowerCase());
+                                return r;
+                            }).filter(Boolean);
                             const primaryRole = protectedRoleObjs.sort((a, b) => (b.position || 0) - (a.position || 0))[0];
                             const roleName = primaryRole ? primaryRole.name : 'that role';
                             const embed = new EmbedBuilder()
