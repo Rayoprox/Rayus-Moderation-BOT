@@ -3,6 +3,9 @@ const db = require('../../utils/db.js');
 const { emojis, DEVELOPER_IDS } = require('../../utils/config.js');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { performance } = require('perf_hooks');
+const pkg = require('../../package.json');
 
 module.exports = {
     deploy: 'developer',
@@ -83,7 +86,57 @@ module.exports = {
             console.log(`  ✅ Bot Permissions Verified.`);
         }
 
-        console.log(`\n[4/4] CHECKING CORE FILES`);
+        
+
+      
+        // Additional deep checks
+        console.log(`\n[5/9] ENVIRONMENT`);
+        const requiredEnvs = ['DISCORD_TOKEN', 'DISCORD_GUILD_ID', 'DISCORD_APPEAL_GUILD_ID', 'DATABASE_URL'];
+        requiredEnvs.forEach(k => {
+            if (!process.env[k]) {
+                errors++;
+                console.error(`  ❌ MISSING ENV: ${k}`);
+            } else {
+                console.log(`  ✅ ENV: ${k} present`);
+            }
+        });
+
+        console.log(`\n[6/9] NODE & PROCESS`);
+        console.log(`  Node: ${process.version}`);
+        console.log(`  Platform: ${process.platform} ${process.arch}`);
+        console.log(`  Uptime: ${Math.floor(process.uptime())}s`);
+        const mem = process.memoryUsage();
+        console.log(`  Memory: RSS ${(mem.rss/1024/1024).toFixed(1)} MB | HeapUsed ${(mem.heapUsed/1024/1024).toFixed(1)} MB`);
+        console.log(`  CPU (user/system micros):`, process.cpuUsage());
+
+        console.log(`\n[7/9] PACKAGE VERSIONS`);
+        console.log(`  name: ${pkg.name} @ ${pkg.version}`);
+        if (pkg.dependencies) {
+            Object.entries(pkg.dependencies).slice(0,10).forEach(([k,v]) => console.log(`  ${k}: ${v}`));
+        }
+
+        console.log(`\n[8/9] SHARD & CONNECTION`);
+        try {
+            const wsPing = interaction.client.ws?.ping ?? null;
+            console.log(`  WS Ping: ${wsPing} ms`);
+            if (interaction.client.shard) {
+                console.log(`  Shard Count: ${interaction.client.shard.count}`);
+            }
+        } catch (err) {
+            console.warn(`  ⚠️ Could not read shard/ws info: ${err.message}`);
+        }
+
+        console.log(`\n[9/9] DATABASE PING & TABLES`);
+        try {
+            const t0 = performance.now();
+            await db.query('SELECT 1');
+            const dt = Math.round(performance.now() - t0);
+            console.log(`  ✅ DB ping: ${dt}ms`);
+        } catch (err) {
+            errors++;
+            console.error(`  ❌ DB ping failed: ${err.message}`);
+        }
+
         const criticalFiles = [
             'handlers/commandHandler.js',
             'handlers/componentHandler.js',
@@ -91,26 +144,44 @@ module.exports = {
             'utils/prefixShim.js',
             'utils/db.js'
         ];
-
+        console.log(`\n[FILES] Core file checks:`);
         criticalFiles.forEach(file => {
             const filePath = path.join(__dirname, '../../', file);
             if (!fs.existsSync(filePath)) {
                 errors++;
                 console.error(`  ❌ MISSING FILE: ${file}`);
+            } else {
+                const stat = fs.statSync(filePath);
+                console.log(`  ✅ ${file} (${(stat.size/1024).toFixed(1)} KB)`);
             }
         });
-        console.log(`  ✅ Core Files Verification Complete.`);
 
-      
+        // Bot stats
+        try {
+            console.log(`\n[BOT] Client stats`);
+            console.log(`  Guilds (cached): ${interaction.client.guilds.cache.size}`);
+            const memberSum = interaction.client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0);
+            console.log(`  Approx total members (cached): ${memberSum}`);
+            console.log(`  Commands loaded: ${interaction.client.commands.size}`);
+        } catch (err) {
+            console.warn(`  ⚠️ Could not read client stats: ${err.message}`);
+        }
+
         console.log("\n================================================");
-        const statusText = errors === 0 ? "ALL SYSTEMS OPERATIONAL" : `${errors} CRITICAL ISSUES DETECTED`;
+        const statusText = errors === 0 ? "ALL SYSTEMS OPERATIONAL" : `${errors} ISSUES DETECTED`;
         console.log(`[DIAGNOSTIC] RESULT: ${statusText}`);
         console.log("================================================\n");
 
-      
         const finalEmbed = new EmbedBuilder()
             .setColor(errors === 0 ? 0x2ECC71 : 0xE74C3C)
-            .setDescription(`${errors === 0 ? emojis.success : emojis.error} **Diagnostic Completed.**\nCheck your console logs for the full report.`);
+            .setTitle(`${errors === 0 ? emojis.success || '✅' : emojis.error || '⛔'} Diagnostic Completed`)
+            .setDescription(`Status: **${statusText}**\n\nCheck console/worker logs for the full detailed report.`)
+            .addFields(
+                { name: 'Summary', value: `Errors detected: ${errors}`, inline: true },
+                { name: 'Node', value: process.version, inline: true },
+                { name: 'Guilds', value: `${interaction.client.guilds.cache.size}`, inline: true }
+            )
+            .setTimestamp();
 
         await interaction.editReply({ content: null, embeds: [finalEmbed] });
     },
