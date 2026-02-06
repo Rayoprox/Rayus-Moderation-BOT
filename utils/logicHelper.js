@@ -60,7 +60,13 @@ async function validateCommandPermissions(client, guild, member, user, commandNa
     else if (hasSpecificRules) { 
         if (hasSpecificPermission) allowed = true; 
     }
-    
+    else if (!hasSpecificRules && isStaffCommand) {
+        const staffRaw = guildData.settings.staff_roles || '';
+        const staffRoles = staffRaw ? staffRaw.split(',').filter(Boolean) : [];
+        const hasStaffRole = staffRoles.length > 0 && member.roles.cache.some(r => staffRoles.includes(r.id));
+        if (hasStaffRole) allowed = true;
+    }
+
     else if (isPublic) allowed = true;
 
     if (!allowed) {
